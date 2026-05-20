@@ -1,0 +1,30 @@
+# --- ENTORNOS VIRTUALES ---
+venv/
+env/
+.venv/
+
+# --- CONFIGURACIÓN Y SECRETOS ---
+.env
+*.log
+
+# --- DATOS Y CACHE DE IA ---
+# Cache de librerías de Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# --- ARCHIVOS DE SISTEMA / EDITORES ---
+.DS_Store
+.vscode/
+.cursor/
+Thumbs.db
+
+# Data - los documentos no suben al repo
+data/raw/
+data/processed/
+
+# Output files
+output/
+
+# Vector DB local
+vector_db/
