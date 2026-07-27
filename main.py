@@ -18,7 +18,8 @@ from scripts.indexer import index_all
 from scripts.retriever import retrieve, format_chunks_for_prompt
 from scripts.redactor import generate_draft
 from scripts.exporter import export_document, Section
-from scripts.utils.paths import init_project_structure
+from scripts.generate_synthetic_dataset import main as generate_dataset
+from scripts.evaluator import main as run_evaluator
 
 # ─────────────────────────────────────────────────────────
 # ENVIRONMENT & LOGGING
@@ -260,6 +261,29 @@ def run_export_test(project_name: str | None = None):
     )
     print(f"\nDocument generated: {output_path}")
 
+def run_eval_generate(project_name: str | None = None):
+    """
+    Stage: Generate synthetic golden dataset for evaluation.
+    """
+
+    if not project_name:
+        logger.error(
+            "No project specified. "
+            "Use: python main.py --stage eval-generate --project your_project_name"
+        )
+        return
+
+    generate_dataset(project_name)
+
+def run_evaluate(project_name: str | None = None):
+    """
+    Stage: Run RAGAS evaluation against the synthetic dataset.
+    """
+    if not project_name:
+        logger.error("Use: python main.py --stage evaluate --project your_project")
+        return
+    run_evaluator(project_name)
+
 # ─────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────
@@ -271,6 +295,8 @@ STAGES = {
     "retrieval-test": run_retrieval_test,
     "draft-test":   run_draft_test,
     "export-test":    run_export_test,
+    "eval-generate":  run_eval_generate,
+    "evaluate":       run_evaluate,
 }
 
 def main():
@@ -286,6 +312,8 @@ def main():
             "retrieval-test",
             "draft-test",
             "export-test",
+            "eval-generate",
+            "evaluate",
         ],
         required=True,
         help="Pipeline stage to run"
@@ -303,6 +331,8 @@ def main():
         "retrieval-test": run_retrieval_test,
         "draft-test":     run_draft_test,
         "export-test":    run_export_test,
+        "eval-generate":  run_eval_generate,
+        "evaluate":       run_evaluate,
     }
 
     # Stages that don't need --project

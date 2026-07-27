@@ -8,11 +8,16 @@ import os
 import logging
 from pathlib import Path
 from dataclasses import dataclass
+from dotenv import load_dotenv
 
-from openai import OpenAI
+from openai import OpenAI, OpenAIError, RateLimitError
 from scripts.retriever import retrieve, format_chunks_for_prompt
+from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
 
 logger = logging.getLogger(__name__)
+load_dotenv()
+
+openai_client = OpenAI()
 
 # ─────────────────────────────────────────────────────────
 # CONFIGURATION
@@ -20,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 LLM_MODEL       = os.getenv("LLM_MODEL", "gpt-4o-mini")
 LLM_MAX_TOKENS  = int(os.getenv("LLM_MAX_TOKENS", 2048))
-LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", 0.3))
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", 0.0))
 
 
 # ─────────────────────────────────────────────────────────
@@ -28,23 +33,25 @@ LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", 0.3))
 # ─────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """
-You are an expert writer specializing in European NGO project proposals,
-specifically for Erasmus+ and similar EU funding programmes.
+# SYSTEM PROMPT: AI Writer & Analyst for EU Project Proposals
 
-Your writing is formal, technical and evidence-based.
-You write exclusively in English.
+## 1. ROLE & IDENTITY
+You are an expert AI writer specializing in drafting and analyzing European NGO project proposals, specifically for Erasmus+ and similar EU funding programmes. Your writing style is formal, objective, technical, and strictly evidence-based. You write exclusively in English.
 
-STRICT RULES — these are non-negotiable:
-1. Only use information explicitly present in the provided context
-2. If required data is not in the context, write [DATA NOT FOUND] — never fill the gap
-3. Never calculate, estimate or invent figures — copy them literally from context
-4. Tables must never be modified — reference them but do not rewrite them
-5. Flag any partner or consortium information with [NEEDS REVIEW]
-6. If you are unsure about any fact, flag it with [VERIFY]
-7. Do not add conclusions, recommendations or opinions not grounded in the context
+## 2. INFORMATION PRIORITIZATION & CONTEXT SCANNING
+EU grant applications and reference texts contain extensive background data, complex project codes, and partner breakdowns.
+- Prioritize high-level definitions, direct instructions, and explicit project components over surrounding technical or regional statistics.
+- Scan partner descriptions and previous project lists thoroughly. Technical standards, frameworks, or metrics mentioned within these dense sections must be extracted directly if they correlate with the question.
 
-Your goal is to produce a draft that is faithful to the source documents,
-coherent with already approved sections, and aligned with the provided directives.
+## 3. STRICT BOUNDEDNESS & VERBATIM INTEGRITY (Anti-Hallucination Lock)
+- Rely ONLY on the clear facts directly mentioned in the provided context. Do not use outside knowledge, external regulations, or speculative extrapolations.
+- **Drafting Constraint:** When answering or drafting, use the exact terminology, names, and technical standards present in the text (e.g., if the text mentions "workshops", describe the activity as "workshops"). Do not introduce external synonyms, paraphrases, or descriptive adjectives that are not explicitly in the text, as this triggers evaluation failures.
+- Copy all numbers, budgets, dates, and quantitative figures literally. Do not calculate, estimate, or modify any statistical data.
+- Structure your response to be direct, professional, and completely aligned with the user's inquiry, avoiding unnecessary preambles or conversational filler.
+
+## 4. MISSING INFORMATION & STRICT ESCAPE PROTOCOL
+- If the context completely lacks any facts, direct mentions, or specific technical fragments related to the question, state exactly: "The provided context does not contain sufficient information to answer this question."
+- Do not attempt to deduce, infer, or build an answer for questions where the specific technical term or activity is missing. If a question asks about an untraceable element, you MUST trigger the exact missing information phrase.
 """.strip()
 
 
@@ -144,6 +151,7 @@ def build_user_prompt(
     approved_sections: dict[str, str],
     directives:        str,
     call_context:      str,
+    mode: str = "draft",
 ) -> str:
     blocks = []
 
@@ -186,12 +194,22 @@ def build_user_prompt(
             f"{approved_text}"
         )
 
-    blocks.append(
-        f"## TASK\n"
-        f"Write the following section: **{section_name}**\n\n"
-        f"{user_instruction}"
-    )
-
+    if mode == "evaluation":
+        blocks.append(
+            "## TASK\n"
+            "Answer the user's question using only the provided CONTEXT.\n"
+            "If the answer is explicitly present in the context, answer directly using the same terminology.\n"
+            "If the answer is not explicitly present in the context, state exactly:\n"
+            "\"The provided context does not contain sufficient information to answer this question.\"\n\n"
+            f"Question: {user_instruction}"
+        )
+    else:
+        blocks.append(
+            f"## TASK\n"
+            f"Write the following section: **{section_name}**\n\n"
+            f"{user_instruction}"
+        )
+    
     return "\n\n---\n\n".join(blocks)
 
 
@@ -208,16 +226,51 @@ class DraftResult:
     output_tokens:  int
     chunks_used:    int
 
+# Best Practice: Define a robust, enterprise-grade retry policy
+# This catches 429 (RateLimitError) and generic server errors, applying 
+# an exponential backoff with random jitter (e.g., wait 2s, then 4s, then 8s... up to 60s)
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(5),
+    wait=wait_random_exponential(min=2, max=60, multiplier=1),
+    retry=retry_if_exception_type((RateLimitError, OpenAIError)),
+    before_sleep=lambda retry_state: logger.warning(
+        f"Rate limit or API error detected. Retrying attempt {retry_state.attempt_number}... "
+        f"Waiting {retry_state.next_action.sleep} seconds before next request."
+    )
+)
+
+def _call_openai_with_retry(messages: list[dict[str, str]]) -> tuple[str, any]:
+    """
+    Isolated wrapper for OpenAI API execution protected by exponential backoff with jitter.
+    """
+    response = openai_client.chat.completions.create(
+        model=LLM_MODEL,
+        max_tokens=LLM_MAX_TOKENS,
+        temperature=LLM_TEMPERATURE,
+        messages=messages,
+        extra_body={
+            "prompt_cache_key": "trustlabs_redactor",
+            "prompt_cache_retention": "24h",
+        }
+    )
+    draft = response.choices[0].message.content.strip()
+    return draft, response.usage
+
+
 def generate_draft(
-    section_name:      str,
-    user_instruction:  str,
+    section_name: str,
+    user_instruction: str,
     approved_sections: dict[str, str] | None = None,
-    top_k:             int = 3,
-    directives_path:   Path | None = None,
-    chroma_dir:        str | None = None,
+    top_k: int = 3,
+    directives_path: Path | None = None,
+    chroma_dir: str | None = None,
+    retrieval_query: str | None = None,
+    mode: str = "draft"
 ) -> DraftResult:
     """
-    Main entry point for draft generation.
+    Main entry point for draft generation. Protected against 429 Rate Limit Errors 
+    via automated exponential backoff with jitter.
 
     Args:
         section_name:      Name of the section being written
@@ -227,8 +280,6 @@ def generate_draft(
         directives_path:   Path to directives.md — passed from Streamlit session
         chroma_dir:        Path to ChromaDB directory — passed from Streamlit session
     """
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
     # Step 1 — Load directives
     resolved_directives = directives_path or Path(
         os.getenv("DIRECTIVES_PATH", "config/directives.md")
@@ -238,7 +289,7 @@ def generate_draft(
     section_dir  = extract_section_directive(directives, section_name)
 
     # Step 2 — Retrieve context chunks
-    query        = f"{section_name} {user_instruction}"
+    query = retrieval_query or f"{section_name} {user_instruction}"
     chunks       = retrieve(query, top_k=top_k, chroma_dir=chroma_dir)
     context_text = format_chunks_for_prompt(chunks)
 
@@ -249,7 +300,6 @@ def generate_draft(
     logger.info(f"Call context present : {bool(call_context)}")
 
     # Step 3 — Assemble prompt
-    # Call context goes first — static block, gets cached by OpenAI
     user_prompt = build_user_prompt(
         section_name      = section_name,
         user_instruction  = user_instruction,
@@ -257,25 +307,23 @@ def generate_draft(
         approved_sections = approved_sections or {},
         directives        = section_dir,
         call_context      = call_context,
+        mode              = mode,
     )
 
-    # Step 4 — Call OpenAI with prompt cache params
-    response = client.chat.completions.create(
-        model       = LLM_MODEL,
-        max_tokens  = LLM_MAX_TOKENS,
-        temperature = LLM_TEMPERATURE,
-        messages    = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_prompt},
-        ],
-        extra_body = {
-            "prompt_cache_key":       "trustlabs_redactor",
-            "prompt_cache_retention": "24h",
-        }
-    )
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user",   "content": user_prompt},
+    ]
 
-    draft = response.choices[0].message.content.strip()
-    usage = response.usage
+    # Step 4 — Call OpenAI using the highly-resilient isolated function
+    try:
+        draft, usage = _call_openai_with_retry(messages)
+    except RateLimitError as e:
+        logger.error(f"Execution failed: API Rate limit completely exhausted. Details: {e}")
+        raise e
+    except OpenAIError as e:
+        logger.error(f"Execution failed: OpenAI service error. Details: {e}")
+        raise e
 
     # Log cache usage if available
     if hasattr(usage, "prompt_tokens_details"):

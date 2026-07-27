@@ -20,6 +20,7 @@ _DIR_CHUNKS     = os.getenv("DIR_CHUNKS",     "data/chunks")
 _DIR_VECTOR_DB  = os.getenv("DIR_VECTOR_DB",  "vector_db")
 _DIR_CONFIG     = os.getenv("DIR_CONFIG",     "config")
 _DIR_OUTPUT     = os.getenv("DIR_OUTPUT",     "output")
+_DIR_DATASET_EVAL     = os.getenv("_DIR_DATASET_EVAL",     "data/evaluation")
 _FILE_DIRECTIVES = os.getenv("FILE_DIRECTIVES", "config/directives.md")
 _FILE_TEMPLATE   = os.getenv("FILE_TEMPLATE",   "config/template.docx")
 _FILE_PROGRESS   = os.getenv("FILE_PROGRESS",   "progress.json")
@@ -50,6 +51,7 @@ def get_project_paths(project_name: str) -> dict[str, Path]:
         "template":   base / _FILE_TEMPLATE,
         "progress":   base / _FILE_PROGRESS,
         "index": base / _FILE_INDEX,
+        "dataset_evaluation": base / _DIR_DATASET_EVAL,
     }
 
 
@@ -75,7 +77,7 @@ def init_project_structure(project_name: str) -> dict[str, Path]:
     paths = get_project_paths(project_name)
 
     # Create all directories
-    for key in ["raw", "processed", "chunks", "vector_db", "config", "output"]:
+    for key in ["raw", "processed", "chunks", "vector_db", "config", "output","dataset_evaluation"]:
         paths[key].mkdir(parents=True, exist_ok=True)
 
     # Create empty directives.md if it doesn't exist

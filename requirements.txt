@@ -14,3 +14,12 @@ openai>=1.30.0
 
 #Streamlit
 streamlit>=1.35.0
+
+#RAGAS
+ragas>=0.2.0
+
+#Datasets
+datasets>=3.0.0
+
+#tenacity
+tenacity>=9.0.0
