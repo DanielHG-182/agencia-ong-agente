@@ -86,3 +86,12 @@ __MACOSX/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Downloaded models
+opt/
+
+# Generated project data
+projects/*/data/
+
+# Source documents
+*.pdf
