@@ -97,3 +97,4 @@ projects/*/data/
 *.pdf
 
 **/progress.json
+projects/*/config/directives.md
