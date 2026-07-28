@@ -95,3 +95,5 @@ projects/*/data/
 
 # Source documents
 *.pdf
+
+**/progress.json
