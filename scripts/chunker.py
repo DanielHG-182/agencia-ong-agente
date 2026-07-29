@@ -181,7 +181,7 @@ def make_chunk_id(source_file: str, title: str, part: int) -> str:
     Example: "proyecto_2022_metodologia_1"
     """
     base = f"{source_file}_{title}_{part}"
-    hash_suffix = hashlib.md5(base.encode()).hexdigest()[:6]
+    hash_suffix = hashlib.sha256(base.encode()).hexdigest()[:6]
     slug = re.sub(r'[^a-z0-9]+', '_', base.lower())[:40]
     return f"{slug}_{hash_suffix}"
 

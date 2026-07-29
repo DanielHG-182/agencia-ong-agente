@@ -1,56 +1,112 @@
 # ==========================================
-# 1. ENTORNOS VIRTUALES
+# 1. VIRTUAL ENVIRONMENTS
 # ==========================================
-venv/
 .venv/
+venv/
 env/
 ENV/
-env.bak/
-venv.bak/
 
 # ==========================================
-# 2. CONFIGURACIÓN, CLAVES Y SECRETOS
+# 2. ENVIRONMENT, SECRETS AND CREDENTIALS
 # ==========================================
 .env
 .env.*
 !.env.example
-*.log
+
+.streamlit/secrets.toml
+
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets*.json
 
 # ==========================================
-# 3. PYTHON & CACHÉ
+# 3. PYTHON
 # ==========================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
+.eggs/
 *.egg
 
 # ==========================================
-# 4. ARCHIVOS Y SCRIPTS DE PRUEBA TEMPORALES
+# 4. TEST, LINT AND TOOL CACHES
 # ==========================================
-PRUEBA*.py
-prueba*.py
-*.txt
-!requirements.txt
-!README*.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ipynb_checkpoints/
 
 # ==========================================
-# 5. ARCHIVOS DE SISTEMA Y EDITORES (macOS/Windows/VSCode)
+# 5. LOGS AND TEMPORARY FILES
+# ==========================================
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+~$*
+
+PRUEBA*.py
+prueba*.py
+
+# ==========================================
+# 6. GENERATED RAG DATA
+# ==========================================
+**/data/raw/
+**/data/processed/
+**/data/chunks/
+**/data/evaluation/
+**/output/
+**/vector_db/
+**/chroma_db/
+
+**/progress.json
+projects/*/config/directives.md
+
+# ==========================================
+# 7. DATABASES, MODELS AND GENERATED FILES
+# ==========================================
+*.sqlite
+*.sqlite3
+*.db
+*.pkl
+*.joblib
+
+*.h5
+*.pth
+*.pt
+*.onnx
+*.safetensors
+
+opt/
+models/
+.cache/
+
+# ==========================================
+# 8. SOURCE DOCUMENTS
+# ==========================================
+*.pdf
+*.doc
+*.docx
+
+# Safe example documents may be explicitly allowed later:
+# !examples/**/*.pdf
+# !tests/fixtures/**/*.pdf
+
+# ==========================================
+# 9. OPERATING SYSTEMS AND EDITORS
 # ==========================================
 .DS_Store
 .DS_Store?
@@ -59,42 +115,16 @@ prueba*.py
 .Trashes
 ehthumbs.db
 Thumbs.db
+Desktop.ini
+__MACOSX/
+
 .vscode/
 .cursor/
 .idea/
-__MACOSX/
 
 # ==========================================
-# 6. DATOS, VECTOR DB Y MODELOS DE IA
+# 10. LOCAL SECURITY REPORTS
 # ==========================================
-**/data/raw/
-**/data/processed/
-**/output/
-**/vector_db/
-**/chroma_db/
-*.pkl
-*.h5
-*.pth
-*.onnx
-*.safetensors
-*.sqlite3
-
-# ==========================================
-# 7. JUPYTER & TESTS
-# ==========================================
-.ipynb_checkpoints
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Downloaded models
-opt/
-
-# Generated project data
-projects/*/data/
-
-# Source documents
-*.pdf
-
-**/progress.json
-projects/*/config/directives.md
+gitleaks-report.*
+bandit-report.*
+dependency-report.*

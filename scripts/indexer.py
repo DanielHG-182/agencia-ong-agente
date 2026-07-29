@@ -53,8 +53,12 @@ def get_chroma_collection(
         try:
             client.delete_collection(COLLECTION_NAME)
             logger.warning(f"Collection '{COLLECTION_NAME}' dropped for re-indexing")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Could not drop collection '%s' during re-indexing: %s",
+                COLLECTION_NAME,
+                exc
+            )
 
     return client.get_or_create_collection(
         name     = COLLECTION_NAME,

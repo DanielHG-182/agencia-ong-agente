@@ -81,7 +81,7 @@ def new_project_dialog(navigate_to):
 
     project_display_name = st.text_input(
         "Project name",
-        placeholder="e.g. Erasmus BB 2026",
+        placeholder="e.g. Demo Project",
         help="This will be used as the folder name"
     )
 

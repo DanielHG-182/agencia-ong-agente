@@ -26,17 +26,36 @@ _FILE_TEMPLATE   = os.getenv("FILE_TEMPLATE",   "config/template.docx")
 _FILE_PROGRESS   = os.getenv("FILE_PROGRESS",   "progress.json")
 _FILE_INDEX      = os.getenv("FILE_INDEX", "config/index.json")
 
+def _validate_project_name(project_name: str) -> str:
+    """
+    Validates project names to prevent path traversal.
+    Only letters, numbers, hyphens and underscores are allowed.
+    """
+    if not project_name:
+        raise ValueError("Project name cannot be empty")
+
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+
+    if any(char not in allowed for char in project_name):
+        raise ValueError(
+            "Project name may only contain letters, numbers, hyphens and underscores"
+        )
+
+    return project_name
+
 def get_project_paths(project_name: str) -> dict[str, Path]:
     """
     Returns all paths for a given project.
     Every path is derived from .env values — nothing hardcoded.
 
     Usage:
-        paths = get_project_paths("erasmus_bb_2026")
-        paths["raw"]        → projects/erasmus_bb_2026/data/raw
-        paths["vector_db"]  → projects/erasmus_bb_2026/vector_db
-        paths["directives"] → projects/erasmus_bb_2026/config/directives.md
+        paths = get_project_paths("demo_project")
+        paths["raw"]        → projects/demo_project/data/raw
+        paths["vector_db"]  → projects/demo_project/vector_db
+        paths["directives"] → projects/demo_project/config/directives.md
     """
+
+    project_name = _validate_project_name(project_name)
     base = PROJECTS_BASE_DIR / project_name
 
     return {

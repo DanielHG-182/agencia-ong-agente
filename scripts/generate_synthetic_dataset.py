@@ -4,8 +4,8 @@ Generates a synthetic golden dataset (question + ground_truth) for a given proje
 by reading its processed Markdown files and using OpenAI to derive realistic QA pairs.
 
 Usage:
-    python generate_synthetic_dataset.py --project erasmus_bb_2026
-    python generate_synthetic_dataset.py --project erasmus_bb_2026 --questions-per-chunk 2 --max-chunks 10
+    python generate_synthetic_dataset.py --project demo_project
+    python generate_synthetic_dataset.py --project demo_project --questions-per-chunk 2 --max-chunks 10
 """
 
 import argparse
@@ -174,7 +174,7 @@ def main(project_name: str = None):
     parser.add_argument(
         "--project",
         required=True,
-        help="Project folder name (e.g. erasmus_bb_2026)",
+        help="Project folder name (e.g. demo_project)",
     )
     parser.add_argument(
         "--questions-per-chunk",

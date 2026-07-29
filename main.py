@@ -321,7 +321,7 @@ def main():
     parser.add_argument(
         "--project",
         default=None,
-        help="Project folder name (e.g. erasmus_bb_2026)"
+        help="Project folder name (e.g. demo_project)"
     )
     args = parser.parse_args()
 

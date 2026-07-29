@@ -159,7 +159,7 @@ def build_user_prompt(
     if call_context:
         blocks.append(
             "## CALL CONTEXT AND THEMATIC FRAMEWORK\n"
-            "Integrate these themes as TRUSTLABS own rationale — "
+            "Integrate these themes as the project's own rationale — "
             "never cite them as external requirements.\n\n"
             f"{call_context}"
         )
@@ -250,7 +250,7 @@ def _call_openai_with_retry(messages: list[dict[str, str]]) -> tuple[str, any]:
         temperature=LLM_TEMPERATURE,
         messages=messages,
         extra_body={
-            "prompt_cache_key": "trustlabs_redactor",
+            "prompt_cache_key": "document_assistant_redactor",
             "prompt_cache_retention": "24h",
         }
     )
