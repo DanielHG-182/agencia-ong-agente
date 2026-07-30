@@ -197,7 +197,6 @@ def convert_pdf(path: Path) -> str:
 CONVERTERS = {
     ".txt":  convert_txt,
     ".docx": convert_docx,
-    ".doc":  convert_docx,
     ".pdf":  convert_pdf,
 }
 

@@ -1,6 +1,6 @@
 """
 chunker.py
-Splits processed Markdown files into semantic chunks with metadata.
+Splits processed Markdown files into structure-aware chunks with metadata.
 
 Strategy:
   - Primary split: by Markdown headings (H1 > H2 > H3)

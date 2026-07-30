@@ -43,7 +43,7 @@ RAW_DIR       = Path(os.getenv("RAW_DOCS_DIR", "data/raw"))
 PROCESSED_DIR = Path(os.getenv("PROCESSED_DOCS_DIR", "data/processed"))
 CHUNKS_DIR    = Path(os.getenv("CHUNKS_DIR", "data/chunks")) 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 
 # ─────────────────────────────────────────────────────────
