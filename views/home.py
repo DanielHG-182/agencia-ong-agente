@@ -3,73 +3,42 @@ views/home.py
 Home view — project selector and project creation.
 """
 
-import json
-import re
-from datetime import datetime
-from pathlib import Path
-
 import streamlit as st
 
-from scripts.utils.paths import list_projects, init_project_structure, get_project_paths
+from scripts.project_service import (
+    ProjectAlreadyExistsError,
+    ProjectError,
+    ProjectProgressError,
+    create_project,
+    get_project_summary,
+    load_project_progress,
+    slugify_project_name,
+)
+from scripts.utils.paths import get_project_paths, list_projects
 
 
 # ─────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────
 
-def load_progress(paths: dict) -> dict | None:
-    """Loads progress.json for a project. Returns None if not found."""
-    try:
-        return json.loads(paths["progress"].read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-
-def get_project_summary(project_name: str) -> dict:
-    """
-    Returns a summary dict for a project card:
-    sections total, approved, last modified.
-    """
-    paths    = get_project_paths(project_name)
-    progress = load_progress(paths)
-
-    if not progress:
-        return {
-            "total":         0,
-            "approved":      0,
-            "last_modified": "No data",
-        }
-
-    sections     = progress.get("sections", [])
-    approved     = sum(1 for s in sections if s.get("status") == "approved")
-    last_modified = progress.get("last_modified", "")
-
-    return {
-        "total":         len(sections),
-        "approved":      approved,
-        "last_modified": last_modified or "Not started",
-    }
-
-
-def slugify(name: str) -> str:
-    """Converts a project name to a safe folder name."""
-    name = name.lower().strip()
-    name = re.sub(r'[^\w\s-]', '', name)
-    name = re.sub(r'[\s_-]+', '_', name)
-    return name
-
-
 def open_project(project_name: str, navigate_to):
-    """Loads a project into session_state and navigates to sections manager."""
-    paths    = get_project_paths(project_name)
-    progress = load_progress(paths)
+    """Loads a project into session state and opens the sections manager."""
+    try:
+        paths = get_project_paths(project_name)
+        progress = load_project_progress(project_name)
+    except ProjectProgressError as exc:
+        st.error(str(exc))
+        return
 
     st.session_state.active_project = project_name
-    st.session_state.paths          = paths
-    st.session_state.sections       = progress.get("sections", []) if progress else []
+    st.session_state.paths = paths
+    st.session_state.sections = (
+        progress.get("sections", [])
+        if progress
+        else []
+    )
 
     navigate_to("sections_manager")
-
 
 # ─────────────────────────────────────────────────────────
 # NEW PROJECT DIALOG
@@ -86,7 +55,7 @@ def new_project_dialog(navigate_to):
     )
 
     st.caption(
-        f"Folder name: `{slugify(project_display_name)}`"
+        f"Folder name: `{slugify_project_name(project_display_name)}`"
         if project_display_name else "Folder name will appear here"
     )
 
@@ -100,47 +69,31 @@ def new_project_dialog(navigate_to):
                 st.error("Project name cannot be empty.")
                 return
 
-            folder_name = slugify(project_display_name)
-
-            # Check if project already exists
-            if folder_name in list_projects():
-                st.error(f"A project named '{folder_name}' already exists.")
-                return
-
-            # Create structure
             with st.spinner("Creating project structure..."):
                 try:
-                    paths = init_project_structure(folder_name)
-
-                    # Save initial progress.json
-                    progress = {
-                        "project_name":  project_display_name,
-                        "folder_name":   folder_name,
-                        "created_at":    datetime.now().isoformat(),
-                        "last_modified": datetime.now().isoformat(),
-                        "sections":      [],
-                    }
-                    paths["progress"].write_text(
-                        json.dumps(progress, indent=2, ensure_ascii=False),
-                        encoding="utf-8"
+                    folder_name, paths, progress = create_project(
+                        project_display_name
                     )
 
-                    st.success(f"Project '{project_display_name}' created!")
+                    st.success(
+                        f"Project '{progress['project_name']}' created!"
+                    )
 
-                    # Load into session and navigate
                     st.session_state.active_project = folder_name
-                    st.session_state.paths          = paths
-                    st.session_state.sections       = []
+                    st.session_state.paths = paths
+                    st.session_state.sections = progress["sections"]
 
                     navigate_to("sections_manager")
 
-                except Exception as e:
-                    st.error(f"Error creating project: {e}")
+                except ProjectAlreadyExistsError as exc:
+                    st.error(str(exc))
+
+                except ProjectError as exc:
+                    st.error(str(exc))
 
     with col2:
         if st.button("Cancel", use_container_width=True):
             st.rerun()
-
 
 # ─────────────────────────────────────────────────────────
 # MAIN RENDER

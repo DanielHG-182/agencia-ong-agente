@@ -1,4 +1,4 @@
-"""
+﻿"""
 main.py
 Entry point for the ONG document assistant pipeline.
 
@@ -9,7 +9,7 @@ Usage:
 import logging
 import argparse
 import os
-from pathlib import Path
+from scripts.utils.paths import get_project_paths
 
 from dotenv import load_dotenv
 from scripts.document_processor import process_document
@@ -21,9 +21,9 @@ from scripts.exporter import export_document, Section
 from scripts.generate_synthetic_dataset import main as generate_dataset
 from scripts.evaluator import main as run_evaluator
 
-# ─────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # ENVIRONMENT & LOGGING
-# ─────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 load_dotenv()
 
@@ -35,120 +35,171 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ─────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # PATHS
-# ─────────────────────────────────────────────────────────
-
-RAW_DIR       = Path(os.getenv("RAW_DOCS_DIR", "data/raw"))
-PROCESSED_DIR = Path(os.getenv("PROCESSED_DOCS_DIR", "data/processed"))
-CHUNKS_DIR    = Path(os.getenv("CHUNKS_DIR", "data/chunks")) 
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
-
-# ─────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # STAGES
-# ─────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-def run_conversion():
+def run_conversion(project_name: str | None = None):
     """
-    Stage 1: Convert all documents in data/raw to Markdown
-    and save them to data/processed.
+    Stage 1: Convert all source documents for a project to Markdown.
     """
-    logger.info("Starting conversion stage")
-    logger.info(f"Source : {RAW_DIR.resolve()}")
-    logger.info(f"Output : {PROCESSED_DIR.resolve()}")
-
-    if not RAW_DIR.exists():
-        logger.error(f"Raw directory not found: {RAW_DIR}")
+    if not project_name:
+        logger.error(
+            "No project specified. "
+            "Use: python main.py --stage conversion --project your_project_name"
+        )
         return
 
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    paths = get_project_paths(project_name)
+    raw_dir = paths["raw"]
+    processed_dir = paths["processed"]
+
+    logger.info("Starting conversion stage")
+    logger.info(f"Active project : {project_name}")
+    logger.info(f"Source         : {raw_dir.resolve()}")
+    logger.info(f"Output         : {processed_dir.resolve()}")
+
+    if not raw_dir.exists():
+        logger.error(f"Raw directory not found: {raw_dir}")
+        return
+
+    processed_dir.mkdir(parents=True, exist_ok=True)
 
     documents = [
-        f for f in RAW_DIR.iterdir()
-        if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+        file_path
+        for file_path in raw_dir.iterdir()
+        if file_path.is_file()
+        and file_path.suffix.lower() in SUPPORTED_EXTENSIONS
     ]
 
     if not documents:
-        logger.warning("No documents found in data/raw")
+        logger.warning(
+            f"No supported documents found in {raw_dir}"
+        )
         return
 
     logger.info(f"Found {len(documents)} document(s) to process")
 
-    success, failed = 0, 0
+    success = 0
+    failed = 0
 
     for doc_path in sorted(documents):
         logger.info(f"Processing: {doc_path.name}")
+
         try:
             markdown = process_document(doc_path)
 
             if markdown is None:
-                logger.warning(f"Skipped (unsupported format): {doc_path.name}")
+                logger.warning(
+                    f"Skipped unsupported document: {doc_path.name}"
+                )
                 failed += 1
                 continue
 
-            output_path = PROCESSED_DIR / (doc_path.stem + ".md")
+            output_path = processed_dir / f"{doc_path.stem}.md"
             output_path.write_text(
                 f"<!-- SOURCE: {doc_path.name} -->\n\n{markdown}",
-                encoding="utf-8"
+                encoding="utf-8",
             )
+
             logger.info(f"Saved: {output_path.name}")
             success += 1
 
-        except Exception as e:
-            logger.error(f"Failed to process {doc_path.name}: {e}")
+        except Exception as exc:
+            logger.exception(
+                f"Failed to process {doc_path.name}: {exc}"
+            )
             failed += 1
 
-    logger.info(f"Conversion complete — success: {success}, failed: {failed}")
+    logger.info(
+        "Conversion complete â€” "
+        f"success: {success}, failed: {failed}"
+    )
 
+def run_chunking(project_name: str | None = None):
+    """
+    Stage 2: Chunk all processed Markdown files for a project.
+    """
+    if not project_name:
+        logger.error(
+            "No project specified. "
+            "Use: python main.py --stage chunking --project your_project_name"
+        )
+        return
 
-def run_chunking():
-    """
-    Stage 2: Chunk all Markdown files in data/processed
-    and save results to data/chunks as JSON.
-    """
+    paths = get_project_paths(project_name)
+    processed_dir = paths["processed"]
+    chunks_dir = paths["chunks"]
+
     logger.info("Starting chunking stage")
-    logger.info(f"Source : {PROCESSED_DIR.resolve()}")
-    logger.info(f"Output : {CHUNKS_DIR.resolve()}")
+    logger.info(f"Active project : {project_name}")
+    logger.info(f"Source         : {processed_dir.resolve()}")
+    logger.info(f"Output         : {chunks_dir.resolve()}")
 
-    if not PROCESSED_DIR.exists():
-        logger.error(f"Processed directory not found: {PROCESSED_DIR}")
-        logger.error("Run --stage conversion first")
+    if not processed_dir.exists():
+        logger.error(
+            f"Processed directory not found: {processed_dir}"
+        )
+        logger.error(
+            "Run the conversion stage for this project first"
+        )
         return
 
-    CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
+    chunks_dir.mkdir(parents=True, exist_ok=True)
 
-    md_files = list(PROCESSED_DIR.glob("*.md"))
+    markdown_files = list(processed_dir.glob("*.md"))
 
-    if not md_files:
-        logger.warning("No markdown files found in data/processed")
+    if not markdown_files:
+        logger.warning(
+            f"No Markdown files found in {processed_dir}"
+        )
         return
 
-    logger.info(f"Found {len(md_files)} markdown file(s) to chunk")
+    logger.info(
+        f"Found {len(markdown_files)} Markdown file(s) to chunk"
+    )
 
     total_chunks = 0
-    success, failed = 0, 0
+    success = 0
+    failed = 0
 
-    for md_path in sorted(md_files):
-        logger.info(f"Chunking: {md_path.name}")
+    for markdown_path in sorted(markdown_files):
+        logger.info(f"Chunking: {markdown_path.name}")
+
         try:
-            chunks = chunk_file(md_path)
-            output_path = CHUNKS_DIR / (md_path.stem + "_chunks.json")
+            chunks = chunk_file(markdown_path)
+            output_path = (
+                chunks_dir / f"{markdown_path.stem}_chunks.json"
+            )
+
             chunks_to_json(chunks, output_path)
+
             total_chunks += len(chunks)
             success += 1
-        except Exception as e:
-            logger.error(f"Failed to chunk {md_path.name}: {e}")
+
+        except Exception as exc:
+            logger.exception(
+                f"Failed to chunk {markdown_path.name}: {exc}"
+            )
             failed += 1
 
-    logger.info(f"Chunking complete — files: {success}, total chunks: {total_chunks}, failed: {failed}")
+    logger.info(
+        "Chunking complete â€” "
+        f"files: {success}, "
+        f"total chunks: {total_chunks}, "
+        f"failed: {failed}"
+    )
 
 def run_indexing(project_name: str | None = None):
     """
     Stage 3: Generate embeddings and index chunks into ChromaDB.
     """
-    from scripts.utils.paths import get_project_paths
 
     if not project_name:
         logger.error(
@@ -161,7 +212,7 @@ def run_indexing(project_name: str | None = None):
     reset = os.getenv("REINDEX", "false").lower() == "true"
 
     if reset:
-        logger.warning("REINDEX=true — dropping existing collection")
+        logger.warning("REINDEX=true â€” dropping existing collection")
 
     logger.info(f"Active project : {project_name}")
     logger.info(f"ChromaDB path  : {paths['vector_db']}")
@@ -177,7 +228,6 @@ def run_retrieval_test(project_name: str | None = None):
     """
     Quick test to verify ChromaDB retrieval is working.
     """
-    from scripts.utils.paths import get_project_paths
 
     if not project_name:
         logger.error(
@@ -203,7 +253,6 @@ def run_draft_test(project_name: str | None = None):
     """
     Quick test to verify the redactor is working end to end.
     """
-    from scripts.utils.paths import get_project_paths
 
     if not project_name:
         logger.error(
@@ -233,7 +282,6 @@ def run_export_test(project_name: str | None = None):
     """
     Quick test to verify export is working.
     """
-    from scripts.utils.paths import get_project_paths
 
     if not project_name:
         logger.error(
@@ -284,67 +332,44 @@ def run_evaluate(project_name: str | None = None):
         return
     run_evaluator(project_name)
 
-# ─────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # CLI
-# ─────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 STAGES = {
     "conversion": run_conversion,
-    "chunking":   run_chunking,   
-    "indexing":   run_indexing,
+    "chunking": run_chunking,
+    "indexing": run_indexing,
     "retrieval-test": run_retrieval_test,
-    "draft-test":   run_draft_test,
-    "export-test":    run_export_test,
-    "eval-generate":  run_eval_generate,
-    "evaluate":       run_evaluate,
+    "draft-test": run_draft_test,
+    "export-test": run_export_test,
+    "eval-generate": run_eval_generate,
+    "evaluate": run_evaluate,
 }
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ONG Document Assistant — pipeline runner"
+        description="ONG Document Assistant â€” pipeline runner"
     )
+
     parser.add_argument(
         "--stage",
-        choices=[
-            "conversion",
-            "chunking",
-            "indexing",
-            "retrieval-test",
-            "draft-test",
-            "export-test",
-            "eval-generate",
-            "evaluate",
-        ],
+        choices=list(STAGES),
         required=True,
-        help="Pipeline stage to run"
+        help="Pipeline stage to run",
     )
+
     parser.add_argument(
         "--project",
-        default=None,
-        help="Project folder name (e.g. demo_project)"
+        required=True,
+        help="Project folder name (e.g. demo_project)",
     )
+
     args = parser.parse_args()
 
-    # Stages that require --project
-    project_stages = {
-        "indexing":       run_indexing,
-        "retrieval-test": run_retrieval_test,
-        "draft-test":     run_draft_test,
-        "export-test":    run_export_test,
-        "eval-generate":  run_eval_generate,
-        "evaluate":       run_evaluate,
-    }
-
-    # Stages that don't need --project
-    basic_stages = {
-        "conversion": run_conversion,
-        "chunking":   run_chunking,
-    }
-
-    if args.stage in project_stages:
-        project_stages[args.stage](project_name=args.project)
-    else:
-        basic_stages[args.stage]()
+    stage_function = STAGES[args.stage]
+    stage_function(args.project)
 
 
 if __name__ == "__main__":
