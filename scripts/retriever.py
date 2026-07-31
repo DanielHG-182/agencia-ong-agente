@@ -7,10 +7,9 @@ for a given instruction or query text.
 import logging
 from dataclasses import dataclass
 from scripts.config import settings
-from scripts.clients import create_openai_client
+from scripts.clients import create_chroma_client, create_openai_client
 
 import chromadb
-from chromadb.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +42,7 @@ def get_collection(chroma_dir: str) -> chromadb.Collection:
         RuntimeError: If the collection does not exist.
     """
 
-    client = chromadb.PersistentClient(
-        path=chroma_dir,
-        settings=Settings(anonymized_telemetry=False),
-    )
+    client = create_chroma_client(chroma_dir)
 
     try:
         return client.get_collection(settings.chroma_collection_name)

@@ -11,10 +11,9 @@ from pathlib import Path
 
 from openai import OpenAI
 import chromadb
-from chromadb.config import Settings
 
 from scripts.config import settings
-from scripts.clients import create_openai_client
+from scripts.clients import create_chroma_client, create_openai_client
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +35,8 @@ def get_chroma_collection(
     Opens or creates the ChromaDB collection at the given directory.
     If reset=True drops and recreates it (full re-index).
     """
-    client = chromadb.PersistentClient(
-        path     = chroma_dir,
-        settings = Settings(anonymized_telemetry=False)
-    )
+
+    client = create_chroma_client(chroma_dir)
 
     if reset:
         try:

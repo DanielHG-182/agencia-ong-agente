@@ -4,29 +4,20 @@ Generates section drafts using retrieved context, directives,
 and previously approved sections as narrative memory.
 """
 
-import os
 import logging
 from pathlib import Path
 from dataclasses import dataclass
-from dotenv import load_dotenv
+
+from typing import Any
 
 from openai import OpenAI, OpenAIError, RateLimitError
+from scripts.clients import create_openai_client
+from scripts.config import settings
+
 from scripts.retriever import retrieve, format_chunks_for_prompt
 from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
 
 logger = logging.getLogger(__name__)
-load_dotenv()
-
-openai_client = OpenAI()
-
-# ─────────────────────────────────────────────────────────
-# CONFIGURATION
-# ─────────────────────────────────────────────────────────
-
-LLM_MODEL       = os.getenv("LLM_MODEL", "gpt-4o-mini")
-LLM_MAX_TOKENS  = int(os.getenv("LLM_MAX_TOKENS", 2048))
-LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", 0.0))
-
 
 # ─────────────────────────────────────────────────────────
 # SYSTEM PROMPT
@@ -240,109 +231,155 @@ class DraftResult:
     )
 )
 
-def _call_openai_with_retry(messages: list[dict[str, str]]) -> tuple[str, any]:
+def _call_openai_with_retry(
+    client: OpenAI,
+    messages: list[dict[str, str]],
+) -> tuple[str, Any]:
     """
-    Isolated wrapper for OpenAI API execution protected by exponential backoff with jitter.
+    Execute the OpenAI request with exponential backoff and jitter.
     """
-    response = openai_client.chat.completions.create(
-        model=LLM_MODEL,
-        max_tokens=LLM_MAX_TOKENS,
-        temperature=LLM_TEMPERATURE,
+
+    response = client.chat.completions.create(
+        model=settings.llm_model,
+        max_tokens=settings.llm_max_tokens,
+        temperature=settings.llm_temperature,
         messages=messages,
         extra_body={
             "prompt_cache_key": "document_assistant_redactor",
             "prompt_cache_retention": "24h",
-        }
+        },
     )
-    draft = response.choices[0].message.content.strip()
-    return draft, response.usage
 
+    content = response.choices[0].message.content
+
+    if not content:
+        raise RuntimeError("OpenAI returned an empty draft.")
+
+    return content.strip(), response.usage
 
 def generate_draft(
     section_name: str,
     user_instruction: str,
     approved_sections: dict[str, str] | None = None,
-    top_k: int = 3,
+    top_k: int = settings.retriever_top_k,
     directives_path: Path | None = None,
     chroma_dir: str | None = None,
     retrieval_query: str | None = None,
-    mode: str = "draft"
+    mode: str = "draft",
 ) -> DraftResult:
     """
-    Main entry point for draft generation. Protected against 429 Rate Limit Errors 
-    via automated exponential backoff with jitter.
+    Generate a section draft using retrieved context and project directives.
 
     Args:
-        section_name:      Name of the section being written
-        user_instruction:  Specific instruction from the user
-        approved_sections: Dict of {section_name: content} already approved
-        top_k:             Number of chunks to retrieve
-        directives_path:   Path to directives.md — passed from Streamlit session
-        chroma_dir:        Path to ChromaDB directory — passed from Streamlit session
-    """
-    # Step 1 — Load directives
-    resolved_directives = directives_path or Path(
-        os.getenv("DIRECTIVES_PATH", "config/directives.md")
-    )
-    directives   = load_directives(resolved_directives)
-    call_context = extract_call_context(directives)
-    section_dir  = extract_section_directive(directives, section_name)
+        section_name: Name of the section being written.
+        user_instruction: Specific instruction from the user.
+        approved_sections: Previously approved sections used for coherence.
+        top_k: Number of chunks to retrieve.
+        directives_path: Path to the project's directives file.
+        chroma_dir: Path to the active project's ChromaDB directory.
+        retrieval_query: Optional custom query for retrieval.
+        mode: Generation mode, such as "draft" or "evaluation".
 
-    # Step 2 — Retrieve context chunks
+    Returns:
+        The generated draft and usage metadata.
+    """
+
+    resolved_directives = directives_path or Path("config/directives.md")
+
+    directives = load_directives(resolved_directives)
+    call_context = extract_call_context(directives)
+    section_directive = extract_section_directive(
+        directives,
+        section_name,
+    )
+
     query = retrieval_query or f"{section_name} {user_instruction}"
-    chunks       = retrieve(query, top_k=top_k, chroma_dir=chroma_dir)
+
+    chunks = retrieve(
+        query,
+        top_k=top_k,
+        chroma_dir=chroma_dir,
+    )
     context_text = format_chunks_for_prompt(chunks)
 
-    logger.info(f"Generating draft for : '{section_name}'")
-    logger.info(f"Chunks retrieved     : {len(chunks)}")
-    logger.info(f"Approved sections    : {len(approved_sections or {})}")
-    logger.info(f"Directives path      : {resolved_directives}")
-    logger.info(f"Call context present : {bool(call_context)}")
+    logger.info("Generating draft for : '%s'", section_name)
+    logger.info("Chunks retrieved     : %s", len(chunks))
+    logger.info(
+        "Approved sections    : %s",
+        len(approved_sections or {}),
+    )
+    logger.info("Directives path      : %s", resolved_directives)
+    logger.info("Call context present : %s", bool(call_context))
 
-    # Step 3 — Assemble prompt
     user_prompt = build_user_prompt(
-        section_name      = section_name,
-        user_instruction  = user_instruction,
-        context_chunks    = context_text,
-        approved_sections = approved_sections or {},
-        directives        = section_dir,
-        call_context      = call_context,
-        mode              = mode,
+        section_name=section_name,
+        user_instruction=user_instruction,
+        context_chunks=context_text,
+        approved_sections=approved_sections or {},
+        directives=section_directive,
+        call_context=call_context,
+        mode=mode,
     )
 
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user",   "content": user_prompt},
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT,
+        },
+        {
+            "role": "user",
+            "content": user_prompt,
+        },
     ]
 
-    # Step 4 — Call OpenAI using the highly-resilient isolated function
-    try:
-        draft, usage = _call_openai_with_retry(messages)
-    except RateLimitError as e:
-        logger.error(f"Execution failed: API Rate limit completely exhausted. Details: {e}")
-        raise e
-    except OpenAIError as e:
-        logger.error(f"Execution failed: OpenAI service error. Details: {e}")
-        raise e
+    client = create_openai_client()
 
-    # Log cache usage if available
-    if hasattr(usage, "prompt_tokens_details"):
-        cached = getattr(usage.prompt_tokens_details, "cached_tokens", 0)
-        logger.info(f"Cached tokens        : {cached}")
+    try:
+        draft, usage = _call_openai_with_retry(
+            client,
+            messages,
+        )
+    except RateLimitError as exc:
+        logger.error(
+            "Execution failed: API rate limit completely exhausted. "
+            "Details: %s",
+            exc,
+        )
+        raise
+    except OpenAIError as exc:
+        logger.error(
+            "Execution failed: OpenAI service error. Details: %s",
+            exc,
+        )
+        raise
+
+    prompt_tokens_details = getattr(
+        usage,
+        "prompt_tokens_details",
+        None,
+    )
+
+    if prompt_tokens_details is not None:
+        cached_tokens = getattr(
+            prompt_tokens_details,
+            "cached_tokens",
+            0,
+        )
+        logger.info("Cached tokens        : %s", cached_tokens)
 
     logger.info(
-        f"Draft generated — "
-        f"prompt tokens: {usage.prompt_tokens} | "
-        f"output tokens: {usage.completion_tokens}"
+        "Draft generated — prompt tokens: %s | output tokens: %s",
+        usage.prompt_tokens,
+        usage.completion_tokens,
     )
 
     return DraftResult(
-        section_name  = section_name,
-        content       = draft,
-        model         = LLM_MODEL,
-        prompt_tokens = usage.prompt_tokens,
-        output_tokens = usage.completion_tokens,
-        chunks_used   = len(chunks),
+        section_name=section_name,
+        content=draft,
+        model=settings.llm_model,
+        prompt_tokens=usage.prompt_tokens,
+        output_tokens=usage.completion_tokens,
+        chunks_used=len(chunks),
     )
 
 def extract_call_context(directives: str) -> str:
