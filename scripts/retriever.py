@@ -4,22 +4,15 @@ Queries ChromaDB to retrieve the most relevant chunks
 for a given instruction or query text.
 """
 
-import os
 import logging
 from dataclasses import dataclass
+from scripts.config import settings
+from scripts.clients import create_openai_client
 
 import chromadb
 from chromadb.config import Settings
-from openai import OpenAI
 
 logger = logging.getLogger(__name__)
-
-# ─────────────────────────────────────────────────────────
-# CONFIGURATION
-# ─────────────────────────────────────────────────────────
-
-DEFAULT_TOP_K   = int(os.getenv("RETRIEVER_TOP_K", 3))
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 
 # ─────────────────────────────────────────────────────────
 # DATA STRUCTURES
@@ -42,31 +35,27 @@ class RetrievedChunk:
 # CLIENTS
 # ─────────────────────────────────────────────────────────
 
-def get_openai_client() -> OpenAI:
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY not found in environment variables")
-    return OpenAI(api_key=api_key)
-
-
 def get_collection(chroma_dir: str) -> chromadb.Collection:
     """
-    Opens the ChromaDB collection from the given directory.
-    Raises a clear error if the collection does not exist.
-    """
-    client = chromadb.PersistentClient(
-        path     = chroma_dir,
-        settings = Settings(anonymized_telemetry=False)
-    )
-    try:
-        return client.get_collection("ong_documents")
-    except Exception:
-        raise RuntimeError(
-            f"Collection 'ong_documents' not found in '{chroma_dir}'. "
-            f"Run the indexing stage first: "
-            f"python main.py --stage indexing --project your_project_name"
-        )
+    Open the configured ChromaDB collection from the given directory.
 
+    Raises:
+        RuntimeError: If the collection does not exist.
+    """
+
+    client = chromadb.PersistentClient(
+        path=chroma_dir,
+        settings=Settings(anonymized_telemetry=False),
+    )
+
+    try:
+        return client.get_collection(settings.chroma_collection_name)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Collection '{settings.chroma_collection_name}' not found "
+            f"in '{chroma_dir}'. Run the indexing stage first: "
+            "python main.py --stage indexing --project your_project_name"
+        ) from exc
 
 # ─────────────────────────────────────────────────────────
 # RETRIEVAL
@@ -74,7 +63,7 @@ def get_collection(chroma_dir: str) -> chromadb.Collection:
 
 def retrieve(
     query:      str,
-    top_k:      int = DEFAULT_TOP_K,
+    top_k: int = settings.retriever_top_k,
     chroma_dir: str | None = None,
 ) -> list[RetrievedChunk]:
     """
@@ -84,21 +73,28 @@ def retrieve(
     Args:
         query:      Natural language query
         top_k:      Number of chunks to return
-        chroma_dir: Path to ChromaDB directory.
-                    Falls back to CHROMA_DB_DIR env var if not provided.
+        chroma_dir: Path to the active project's ChromaDB directory.
     """
-    # Resolve chroma_dir — parameter takes priority over env var
-    resolved_dir = chroma_dir or os.getenv("CHROMA_DB_DIR", "vector_db")
+    if not chroma_dir:
+        raise ValueError(
+            "chroma_dir is required. Pass the active project's vector database path."
+        )
+
+    resolved_dir = chroma_dir
 
     collection    = get_collection(resolved_dir)
-    openai_client = get_openai_client()
+    openai_client = create_openai_client()
 
-    logger.info(f"Querying ChromaDB — top_k: {top_k} | query: '{query[:80]}'")
-    logger.debug(f"ChromaDB path: {resolved_dir}")
+    logger.info(
+        "Querying ChromaDB — top_k: %s | query: '%s'",
+        top_k,
+        query[:80],
+    )
+    logger.debug("ChromaDB path: %s", resolved_dir)
 
     # Generate query embedding — must match model used during indexing
     response = openai_client.embeddings.create(
-        model = EMBEDDING_MODEL,
+        model=settings.embedding_model,
         input = [query]
     )
     query_embedding = response.data[0].embedding
@@ -131,7 +127,7 @@ def retrieve(
             f"— {chunk.section_title}"
         )
 
-    logger.info(f"Retrieved {len(chunks)} chunks")
+    logger.info("Retrieved %s chunks", len(chunks))
     return chunks
 
 

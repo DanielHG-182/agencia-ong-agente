@@ -4,7 +4,6 @@ Loads chunks from data/chunks JSON files, generates OpenAI embeddings,
 and stores them in a local ChromaDB collection with full metadata.
 """
 
-import os
 import json
 import time
 import logging
@@ -14,27 +13,20 @@ from openai import OpenAI
 import chromadb
 from chromadb.config import Settings
 
+from scripts.config import settings
+from scripts.clients import create_openai_client
+
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────
 # CONFIGURATION
 # ─────────────────────────────────────────────────────────
 
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-COLLECTION_NAME = "ong_documents"
 BATCH_SIZE      = 50
-
 
 # ─────────────────────────────────────────────────────────
 # CLIENTS
 # ─────────────────────────────────────────────────────────
-
-def get_openai_client() -> OpenAI:
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY not found in environment variables")
-    return OpenAI(api_key=api_key)
-
 
 def get_chroma_collection(
     chroma_dir: str,
@@ -51,17 +43,20 @@ def get_chroma_collection(
 
     if reset:
         try:
-            client.delete_collection(COLLECTION_NAME)
-            logger.warning(f"Collection '{COLLECTION_NAME}' dropped for re-indexing")
+            client.delete_collection(settings.chroma_collection_name)
+            logger.warning(
+                "Collection '%s' dropped for re-indexing",
+                settings.chroma_collection_name,
+            )
         except Exception as exc:
             logger.warning(
                 "Could not drop collection '%s' during re-indexing: %s",
-                COLLECTION_NAME,
+                settings.chroma_collection_name,
                 exc
             )
 
     return client.get_or_create_collection(
-        name     = COLLECTION_NAME,
+        name     = settings.chroma_collection_name,
         metadata = {"hnsw:space": "cosine"}
     )
 
@@ -78,7 +73,7 @@ def generate_embeddings(texts: list[str], client: OpenAI) -> list[list[float]]:
     for attempt in range(3):
         try:
             response = client.embeddings.create(
-                model = EMBEDDING_MODEL,
+                model=settings.embedding_model,
                 input = texts,
             )
             return [item.embedding for item in response.data]
@@ -207,7 +202,7 @@ def index_all(
     Returns:
         Total number of chunks indexed
     """
-    client     = get_openai_client()
+    client     = create_openai_client()
     collection = get_chroma_collection(chroma_dir, reset=reset)
 
     json_files = list(chunks_dir.glob("*_chunks.json"))
@@ -217,7 +212,7 @@ def index_all(
         return 0
 
     logger.info(f"Found {len(json_files)} chunk file(s) to index")
-    logger.info(f"Embedding model : {EMBEDDING_MODEL}")
+    logger.info("Embedding model : %s", settings.embedding_model)
     logger.info(f"ChromaDB path   : {chroma_dir}")
 
     total = 0
@@ -225,7 +220,8 @@ def index_all(
         total += index_chunks_file(json_path, collection, client)
 
     logger.info(
-        f"Indexing complete — {total} chunks indexed "
-        f"into '{COLLECTION_NAME}'"
+        "Indexing complete — %s chunks indexed into '%s'",
+        total,
+        settings.chroma_collection_name,
     )
     return total
