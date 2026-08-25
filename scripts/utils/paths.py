@@ -1,7 +1,8 @@
 """
-scripts/utils/paths.py
-Derives all project paths from .env configuration.
-No paths are hardcoded — everything is configurable.
+Project path configuration and utilities.
+
+Project paths are derived from environment-configurable defaults and resolved
+relative to each project's root directory.
 """
 
 import os
@@ -10,21 +11,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Base directory where all projects live — from .env
+# Base directory where all projects live
 PROJECTS_BASE_DIR = Path(os.getenv("PROJECTS_BASE_DIR", "projects"))
 
-# Internal structure — all relative to project root — from .env
-_DIR_RAW        = os.getenv("DIR_RAW",        "data/raw")
-_DIR_PROCESSED  = os.getenv("DIR_PROCESSED",  "data/processed")
-_DIR_CHUNKS     = os.getenv("DIR_CHUNKS",     "data/chunks")
-_DIR_VECTOR_DB  = os.getenv("DIR_VECTOR_DB",  "vector_db")
-_DIR_CONFIG     = os.getenv("DIR_CONFIG",     "config")
-_DIR_OUTPUT     = os.getenv("DIR_OUTPUT",     "output")
-_DIR_DATASET_EVAL     = os.getenv("_DIR_DATASET_EVAL",     "data/evaluation")
+# Internal structure relative to each project root
+_DIR_RAW = os.getenv("DIR_RAW", "data/raw")
+_DIR_PROCESSED = os.getenv("DIR_PROCESSED", "data/processed")
+_DIR_CHUNKS = os.getenv("DIR_CHUNKS", "data/chunks")
+_DIR_VECTOR_DB = os.getenv("DIR_VECTOR_DB", "vector_db")
+_DIR_CONFIG = os.getenv("DIR_CONFIG", "config")
+_DIR_OUTPUT = os.getenv("DIR_OUTPUT", "output")
+_DIR_DATASET_EVAL = os.getenv("DIR_DATASET_EVAL", "data/evaluation")
+
 _FILE_DIRECTIVES = os.getenv("FILE_DIRECTIVES", "config/directives.md")
-_FILE_TEMPLATE   = os.getenv("FILE_TEMPLATE",   "config/template.docx")
-_FILE_PROGRESS   = os.getenv("FILE_PROGRESS",   "progress.json")
-_FILE_INDEX      = os.getenv("FILE_INDEX", "config/index.json")
+_FILE_TEMPLATE = os.getenv("FILE_TEMPLATE", "config/template.docx")
+_FILE_PROGRESS = os.getenv("FILE_PROGRESS", "progress.json")
+_FILE_INDEX = os.getenv("FILE_INDEX", "config/index.json")
 
 def _validate_project_name(project_name: str) -> str:
     """
@@ -59,20 +61,19 @@ def get_project_paths(project_name: str) -> dict[str, Path]:
     base = PROJECTS_BASE_DIR / project_name
 
     return {
-        "base":       base,
-        "raw":        base / _DIR_RAW,
-        "processed":  base / _DIR_PROCESSED,
-        "chunks":     base / _DIR_CHUNKS,
-        "vector_db":  base / _DIR_VECTOR_DB,
-        "config":     base / _DIR_CONFIG,
-        "output":     base / _DIR_OUTPUT,
+        "base": base,
+        "raw": base / _DIR_RAW,
+        "processed": base / _DIR_PROCESSED,
+        "chunks": base / _DIR_CHUNKS,
+        "vector_db": base / _DIR_VECTOR_DB,
+        "config": base / _DIR_CONFIG,
+        "output": base / _DIR_OUTPUT,
         "directives": base / _FILE_DIRECTIVES,
-        "template":   base / _FILE_TEMPLATE,
-        "progress":   base / _FILE_PROGRESS,
+        "template": base / _FILE_TEMPLATE,
+        "progress": base / _FILE_PROGRESS,
         "index": base / _FILE_INDEX,
         "dataset_evaluation": base / _DIR_DATASET_EVAL,
     }
-
 
 def list_projects() -> list[str]:
     """
@@ -96,7 +97,15 @@ def init_project_structure(project_name: str) -> dict[str, Path]:
     paths = get_project_paths(project_name)
 
     # Create all directories
-    for key in ["raw", "processed", "chunks", "vector_db", "config", "output","dataset_evaluation"]:
+    for key in [
+        "raw",
+        "processed",
+        "chunks",
+        "vector_db",
+        "config",
+        "output",
+        "dataset_evaluation",
+    ]:
         paths[key].mkdir(parents=True, exist_ok=True)
 
     # Create empty directives.md if it doesn't exist

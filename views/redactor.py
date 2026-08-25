@@ -3,8 +3,6 @@ views/redactor.py
 Redactor view — generate, edit and approve section drafts.
 """
 
-import json
-from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -12,52 +10,16 @@ import streamlit as st
 from scripts.redactor import generate_draft
 from scripts.exporter import export_document, Section
 
+from scripts.section_service import (
+    get_approved_sections_before,
+    mark_downstream_needs_review,
+    save_sections,
+    update_section,
+)
 
 # ─────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────
-
-def save_sections():
-    """Persists current sections to progress.json."""
-    paths         = st.session_state.paths
-    progress_path = paths["progress"]
-
-    try:
-        existing = json.loads(progress_path.read_text(encoding="utf-8"))
-    except Exception:
-        existing = {}
-
-    existing["sections"]      = st.session_state.sections
-    existing["last_modified"] = datetime.now().isoformat()
-
-    progress_path.write_text(
-        json.dumps(existing, indent=2, ensure_ascii=False),
-        encoding="utf-8"
-    )
-
-
-def mark_downstream_needs_review(edited_index: int):
-    """
-    Marks all subsequent approved sections as needs_review
-    when a section is approved or edited.
-    """
-    sections = st.session_state.sections
-    for i in range(edited_index + 1, len(sections)):
-        if sections[i].get("status") == "approved":
-            sections[i]["status"] = "needs_review"
-
-
-def get_approved_sections_before(index: int) -> dict[str, str]:
-    """
-    Returns approved sections before the current index
-    as a dict {name: content} for narrative coherence.
-    """
-    return {
-        s["name"]: s["content"]
-        for s in st.session_state.sections[:index]
-        if s.get("status") == "approved" and s.get("content")
-    }
-
 
 def export_single_section(section: dict) -> Path:
     """Exports a single section as a .docx file."""
@@ -93,10 +55,10 @@ def unsaved_changes_dialog(destination: str, navigate_to):
         if st.button("💾 Save draft", use_container_width=True, type="primary"):
             index   = st.session_state.active_section
             section = st.session_state.sections[index]
-            section["content"]        = st.session_state.current_draft
-            section["status"]         = "draft"
-            section["last_generated"] = datetime.now().isoformat()
-            save_sections()
+
+            update_section(section=section,content=st.session_state.current_draft,status="draft",)
+            save_sections(st.session_state.paths["progress"],st.session_state.sections,)
+
             st.session_state.unsaved_changes = False
             navigate_to(destination)
 
@@ -202,7 +164,7 @@ def render(navigate_to):
 
         if instruction != section.get("instruction", ""):
             section["instruction"] = instruction
-            save_sections()
+            save_sections(st.session_state.paths["progress"],st.session_state.sections,)
 
         st.divider()
 
@@ -230,7 +192,7 @@ def render(navigate_to):
             disabled            = generate_disabled,
             help                = "Write an instruction first" if not instruction.strip() else ""
         ):
-            approved_before = get_approved_sections_before(index)
+            approved_before = get_approved_sections_before(st.session_state.sections,index,)
 
             with st.spinner(f"Generating '{section['name']}'..."):
                 try:
@@ -299,11 +261,9 @@ def render(navigate_to):
                 type                = "primary",
                 disabled            = not draft_content.strip(),
             ):
-                section["content"]        = draft_content
-                section["status"]         = "approved"
-                section["last_generated"] = datetime.now().isoformat()
-                mark_downstream_needs_review(index)
-                save_sections()
+                update_section( section,content=draft_content,status="approved",)
+                mark_downstream_needs_review(st.session_state.sections,index,)
+                save_sections(st.session_state.paths["progress"],st.session_state.sections,)
                 st.session_state.unsaved_changes = False
                 st.session_state.current_draft   = draft_content
                 st.success(f"Section '{section['name']}' approved!")
@@ -315,10 +275,8 @@ def render(navigate_to):
                 use_container_width = True,
                 disabled            = not draft_content.strip(),
             ):
-                section["content"]        = draft_content
-                section["status"]         = "draft"
-                section["last_generated"] = datetime.now().isoformat()
-                save_sections()
+                update_section(section,content=draft_content,status="draft",)
+                save_sections(st.session_state.paths["progress"],st.session_state.sections,)
                 st.session_state.unsaved_changes = False
                 st.success("Draft saved!")
                 st.rerun()
@@ -329,7 +287,7 @@ def render(navigate_to):
                 use_container_width = True,
                 disabled            = not instruction.strip() or not vector_db_exists,
             ):
-                approved_before = get_approved_sections_before(index)
+                approved_before = get_approved_sections_before(st.session_state.sections,index,)
                 with st.spinner("Regenerating..."):
                     try:
                         result = generate_draft(
