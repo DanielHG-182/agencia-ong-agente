@@ -1,6 +1,6 @@
 """
 app.py
-Entry point for the ONG Document Assistant Streamlit app.
+Entry point for the RAG Proposal Assistant Streamlit app.
 Manages navigation between views using session_state.
 """
 
@@ -14,7 +14,7 @@ load_dotenv()
 # ─────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title = "ONG Document Assistant",
+    page_title = "RAG Proposal Assistant",
     page_icon  = "📄",
     layout     = "wide",
 )

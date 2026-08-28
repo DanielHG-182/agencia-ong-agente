@@ -29,5 +29,8 @@ jobs:
       - name: Check dependencies
         run: pip check
 
+      - name: Smoke test CLI
+        run: python main.py --help
+
       - name: Run tests
         run: python -m pytest -q

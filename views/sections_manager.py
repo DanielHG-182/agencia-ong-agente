@@ -4,10 +4,9 @@ Sections manager view — define, reorder and manage document sections.
 """
 
 import json
-from datetime import datetime
 
 import streamlit as st
-
+from scripts.section_service import (save_sections)
 
 # ─────────────────────────────────────────────────────────
 # CONSTANTS
@@ -21,41 +20,6 @@ STATUS_ICONS = {
 }
 
 HEADING_LEVELS = ["H1", "H2", "H3", "H4", "H5"]
-
-
-# ─────────────────────────────────────────────────────────
-# PROGRESS PERSISTENCE
-# ─────────────────────────────────────────────────────────
-
-def save_sections():
-    """Persists current sections to progress.json."""
-    paths         = st.session_state.paths
-    progress_path = paths["progress"]
-
-    try:
-        existing = json.loads(progress_path.read_text(encoding="utf-8"))
-    except Exception:
-        existing = {}
-
-    existing["sections"]      = st.session_state.sections
-    existing["last_modified"] = datetime.now().isoformat()
-
-    progress_path.write_text(
-        json.dumps(existing, indent=2, ensure_ascii=False),
-        encoding="utf-8"
-    )
-
-
-def mark_downstream_needs_review(edited_index: int):
-    """
-    When a section is edited or re-approved, marks all subsequent
-    approved sections as needs_review to flag potential incoherence.
-    """
-    sections = st.session_state.sections
-    for i in range(edited_index + 1, len(sections)):
-        if sections[i].get("status") == "approved":
-            sections[i]["status"] = "needs_review"
-
 
 # ─────────────────────────────────────────────────────────
 # SECTION BUILDERS
@@ -115,7 +79,7 @@ def add_section_dialog():
                 st.error("Section name cannot be empty.")
                 return
             st.session_state.sections.append(make_section(name.strip(), level))
-            save_sections()
+            save_sections(st.session_state.paths["progress"],st.session_state.sections,)
             st.rerun()
 
     with col2:
@@ -156,7 +120,7 @@ def load_index_dialog():
                 make_section(item["name"], item["level"])
                 for item in index
             ]
-            save_sections()
+            save_sections(st.session_state.paths["progress"],st.session_state.sections,)
             st.rerun()
 
     with col2:
@@ -178,7 +142,7 @@ def confirm_delete_section_dialog(index: int):
     with col1:
         if st.button("Yes, delete", use_container_width=True, type="primary"):
             st.session_state.sections.pop(index)
-            save_sections()
+            save_sections(st.session_state.paths["progress"],st.session_state.sections,)
             st.rerun()
 
     with col2:
@@ -233,7 +197,7 @@ def render_section_row(section: dict, index: int, navigate_to):
                     sections[index], sections[index - 1] = (
                         sections[index - 1], sections[index]
                     )
-                    save_sections()
+                    save_sections(st.session_state.paths["progress"],st.session_state.sections,)
                     st.rerun()
 
             with btn3:
@@ -247,7 +211,7 @@ def render_section_row(section: dict, index: int, navigate_to):
                     sections[index], sections[index + 1] = (
                         sections[index + 1], sections[index]
                     )
-                    save_sections()
+                    save_sections(st.session_state.paths["progress"],st.session_state.sections,)
                     st.rerun()
 
             with btn4:
@@ -314,11 +278,11 @@ def render(navigate_to):
         )
         if not vector_db_exists:
             st.warning(
-                "⚠️ Index not built",
-                help="Run the indexing stage before generating drafts"
+                "Index not ready",
+                help="Build the document index before generating drafts."
             )
         else:
-            st.success("✅ Index ready", )
+            st.success("Index ready", )
 
     st.divider()
 

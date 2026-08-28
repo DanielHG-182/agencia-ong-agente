@@ -177,9 +177,14 @@ def render(navigate_to):
 
         if not vector_db_exists:
             st.error(
-                "Vector index not found. "
-                "Run: python main.py --stage indexing "
-                f"--project {st.session_state.active_project}"
+                "This project is not ready for drafting yet. "
+                "Build the document index first, then return here to generate grounded drafts."
+            )
+
+            st.caption(
+                "CLI: "
+                f"`python main.py --stage indexing --project "
+                f"{st.session_state.active_project}`"
             )
 
         generate_disabled = not vector_db_exists or not instruction.strip()

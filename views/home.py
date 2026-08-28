@@ -100,8 +100,8 @@ def new_project_dialog(navigate_to):
 # ─────────────────────────────────────────────────────────
 
 def render(navigate_to):
-    st.title("📄 ONG Document Assistant")
-    st.caption("Select an existing project or create a new one to get started.")
+    st.title("📄 RAG Proposal Assistant")
+    st.caption("Create or open a project to draft proposal sections using your own documents.")
     st.divider()
 
     projects = list_projects()

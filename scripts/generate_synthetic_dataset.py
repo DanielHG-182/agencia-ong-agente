@@ -365,7 +365,7 @@ def build_multi_context_candidate_groups(
     chunks: list[Chunk],
     max_groups: int = 4,
 ) -> list[list[Chunk]]:
-     """
+    """
     Build adjacent chunk groups as candidates for synthetic
     multi-context question generation.
 

@@ -350,7 +350,7 @@ STAGES = {
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ONG Document Assistant â€” pipeline runner"
+        description="RAG Proposal Assistant — pipeline runner"
     )
 
     parser.add_argument(
