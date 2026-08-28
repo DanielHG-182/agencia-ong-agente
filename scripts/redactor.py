@@ -14,7 +14,12 @@ from openai import OpenAI, OpenAIError, RateLimitError
 from scripts.clients import create_openai_client
 from scripts.config import settings
 
-from scripts.retriever import retrieve, format_chunks_for_prompt
+from scripts.retriever import (
+    RetrievedChunk,
+    retrieve,
+    format_chunks_for_prompt,
+)
+
 from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
 from scripts.directives import (
     extract_call_context,
@@ -88,6 +93,7 @@ def generate_draft(
     chroma_dir: str | None = None,
     retrieval_query: str | None = None,
     mode: str = "draft",
+    retrieved_chunks: list[RetrievedChunk] | None = None,
 ) -> DraftResult:
     """
     Generate a section draft using retrieved context and project directives.
@@ -117,11 +123,15 @@ def generate_draft(
 
     query = retrieval_query or f"{section_name} {user_instruction}"
 
-    chunks = retrieve(
-        query,
-        top_k=top_k,
-        chroma_dir=chroma_dir,
-    )
+    if retrieved_chunks is not None:
+        chunks = retrieved_chunks
+    else:
+        chunks = retrieve(
+            query,
+            top_k=top_k,
+            chroma_dir=chroma_dir,
+        )
+
     context_text = format_chunks_for_prompt(chunks)
 
     logger.info("Generating draft for : '%s'", section_name)

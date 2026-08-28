@@ -36,6 +36,29 @@ def build_user_prompt(
 ) -> str:
     """Assemble the user prompt for drafting or evaluation."""
 
+    if mode == "evaluation":
+        context = (
+            context_chunks
+            if context_chunks
+            else "No relevant context retrieved."
+        )
+
+        return (
+            "## CONTEXT\n"
+            "Use only the information below to answer the question.\n\n"
+            f"{context}\n\n"
+            "---\n\n"
+            "## TASK\n"
+            "Answer the question directly and concisely.\n"
+            "If the answer is explicitly present in the CONTEXT, answer "
+            "using the terminology found there.\n"
+            "If the CONTEXT does not contain sufficient information, state "
+            "exactly:\n"
+            "\"The provided context does not contain sufficient information "
+            "to answer this question.\"\n\n"
+            f"Question: {user_instruction}"
+        )
+
     blocks: list[str] = []
 
     if call_context:
@@ -77,23 +100,11 @@ def build_user_prompt(
             f"{approved_text}"
         )
 
-    if mode == "evaluation":
-        blocks.append(
-            "## TASK\n"
-            "Answer the user's question using only the provided CONTEXT.\n"
-            "If the answer is explicitly present in the context, answer "
-            "directly using the same terminology.\n"
-            "If the answer is not explicitly present in the context, state "
-            "exactly:\n"
-            "\"The provided context does not contain sufficient information "
-            "to answer this question.\"\n\n"
-            f"Question: {user_instruction}"
-        )
-    else:
-        blocks.append(
-            "## TASK\n"
-            f"Write the following section: **{section_name}**\n\n"
-            f"{user_instruction}"
-        )
+    blocks.append(
+        "## TASK\n"
+        f"Write the following section: **{section_name}**\n\n"
+        f"{user_instruction}"
+    )
 
     return "\n\n---\n\n".join(blocks)
+    

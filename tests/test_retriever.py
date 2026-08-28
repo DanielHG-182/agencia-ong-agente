@@ -46,7 +46,7 @@ def test_retrieve_requires_chroma_dir():
         retriever.retrieve("project objectives", chroma_dir=None)
 
 
-def test_retrieve_transforms_results_and_uses_top_k(monkeypatch):
+def test_retrieve_transforms_results_and_uses_candidate_pool(monkeypatch):
     captured = {}
 
     class FakeCollection:
@@ -127,7 +127,7 @@ def test_retrieve_transforms_results_and_uses_top_k(monkeypatch):
     assert captured["embedding_input"] == ["project objectives"]
 
     assert captured["query_embeddings"] == [[0.1, 0.2, 0.3]]
-    assert captured["n_results"] == 2
+    assert captured["n_results"] == 8
     assert captured["include"] == [
         "documents",
         "metadatas",
@@ -248,3 +248,38 @@ def test_format_chunks_for_prompt_formats_metadata():
 
 def test_format_chunks_for_prompt_returns_empty_string_for_no_chunks():
     assert retriever.format_chunks_for_prompt([]) == ""
+
+def test_rerank_score_can_promote_better_matching_chunk():
+    weak_match = retriever.RetrievedChunk(
+        chunk_id="chunk-1",
+        content="General project information and administrative details.",
+        source_file="proposal.md",
+        section_title="Background",
+        section_level=2,
+        parent_section=None,
+        is_continuation=False,
+        has_table=False,
+        relevance_score=0.90,
+    )
+
+    strong_match = retriever.RetrievedChunk(
+        chunk_id="chunk-2",
+        content=(
+            "The impact assessment uses Theory of Change "
+            "and Social Return on Investment."
+        ),
+        source_file="proposal.md",
+        section_title="Impact assessment",
+        section_level=2,
+        parent_section=None,
+        is_continuation=False,
+        has_table=False,
+        relevance_score=0.82,
+    )
+
+    query = "What methodologies are used for impact assessment?"
+
+    weak_score = retriever._rerank_score(query, weak_match)
+    strong_score = retriever._rerank_score(query, strong_match)
+
+    assert strong_score > weak_score

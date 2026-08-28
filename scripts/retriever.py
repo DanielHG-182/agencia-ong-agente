@@ -11,6 +11,8 @@ from scripts.clients import create_chroma_client, create_openai_client
 
 import chromadb
 
+import re
+
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────
@@ -29,6 +31,64 @@ class RetrievedChunk:
     has_table:        bool
     relevance_score:  float
 
+_RERANK_STOPWORDS = {
+    "the", "a", "an", "of", "for", "to", "in", "on", "and", "or",
+    "is", "are", "was", "were", "what", "how", "does", "do",
+    "this", "that", "with", "by", "from", "project",
+}
+
+
+def _tokenize_for_reranking(text: str) -> set[str]:
+    words = re.findall(r"[a-zA-Z0-9]+", text.lower())
+
+    return {
+        word
+        for word in words
+        if len(word) > 2
+        and word not in _RERANK_STOPWORDS
+    }
+
+
+def _rerank_score(
+    query: str,
+    chunk: RetrievedChunk,
+    section_weight: float = 0.15,
+    content_weight: float = 0.05,
+) -> float:
+    """
+    Combine vector similarity with lightweight lexical overlap.
+
+    Vector similarity remains the primary ranking signal.
+    Lexical overlap is used only as a small ranking adjustment.
+    """
+
+    query_terms = _tokenize_for_reranking(query)
+
+    if not query_terms:
+        return chunk.relevance_score
+
+    section_terms = _tokenize_for_reranking(
+        chunk.section_title
+    )
+    content_terms = _tokenize_for_reranking(
+        chunk.content
+    )
+
+    section_overlap = (
+        len(query_terms & section_terms)
+        / len(query_terms)
+    )
+
+    content_overlap = (
+        len(query_terms & content_terms)
+        / len(query_terms)
+    )
+
+    return (
+        chunk.relevance_score
+        + section_weight * section_overlap
+        + content_weight * content_overlap
+    )
 
 # ─────────────────────────────────────────────────────────
 # CLIENTS
@@ -80,9 +140,11 @@ def retrieve(
 
     collection    = get_collection(resolved_dir)
     openai_client = create_openai_client()
+    candidate_k = max(top_k, 8)
 
     logger.info(
-        "Querying ChromaDB — top_k: %s | query: '%s'",
+        "Querying ChromaDB — candidate_k: %s | final_top_k: %s | query: '%s'",
+        candidate_k,
         top_k,
         query[:80],
     )
@@ -96,28 +158,38 @@ def retrieve(
     query_embedding = response.data[0].embedding
 
     results = collection.query(
-        query_embeddings = [query_embedding],
-        n_results        = top_k,
-        include          = ["documents", "metadatas", "distances"]
+        query_embeddings=[query_embedding],
+        n_results=candidate_k,
+        include=["documents", "metadatas", "distances"],
     )
 
-    chunks = []
+    candidates = []
+
     for i in range(len(results["ids"][0])):
         metadata = results["metadatas"][0][i]
         distance = results["distances"][0][i]
 
         chunk = RetrievedChunk(
-            chunk_id        = results["ids"][0][i],
-            content         = results["documents"][0][i],
-            source_file     = metadata.get("source_file", ""),
-            section_title   = metadata.get("section_title", ""),
-            section_level   = int(metadata.get("section_level", 0)),
-            parent_section  = metadata.get("parent_section") or None,
-            is_continuation = bool(metadata.get("is_continuation", False)),
-            has_table       = bool(metadata.get("has_table", False)),
-            relevance_score = round(1 - distance, 4),
+            chunk_id=results["ids"][0][i],
+            content=results["documents"][0][i],
+            source_file=metadata.get("source_file", ""),
+            section_title=metadata.get("section_title", ""),
+            section_level=int(metadata.get("section_level", 0)),
+            parent_section=metadata.get("parent_section") or None,
+            is_continuation=bool(metadata.get("is_continuation", False)),
+            has_table=bool(metadata.get("has_table", False)),
+            relevance_score=round(1 - distance, 4),
         )
-        chunks.append(chunk)
+
+        candidates.append(chunk)
+
+    chunks = sorted(
+        candidates,
+        key=lambda chunk: _rerank_score(query, chunk),
+        reverse=True,
+    )[:top_k]
+
+    for chunk in chunks:
         logger.debug(
             f"  [{chunk.relevance_score:.3f}] {chunk.source_file} "
             f"— {chunk.section_title}"

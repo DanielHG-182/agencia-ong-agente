@@ -84,6 +84,56 @@ def has_table(text: str) -> bool:
     return bool(TABLE_RE.search(text))
 
 
+def deduplicate_table_cells(text: str) -> str:
+    """
+    Remove consecutive duplicate cells from Markdown table rows.
+
+    DOCX-to-Markdown conversion can repeat merged-cell content across
+    several columns, producing large amounts of duplicate retrieval text.
+    Only exact consecutive duplicates are collapsed.
+    """
+    cleaned_lines: list[str] = []
+
+    for line in text.splitlines():
+        stripped = line.strip()
+
+        if not (
+            stripped.startswith("|")
+            and stripped.endswith("|")
+        ):
+            cleaned_lines.append(line)
+            continue
+
+        cells = [
+            cell.strip()
+            for cell in stripped[1:-1].split("|")
+        ]
+
+        # Preserve Markdown separator rows unchanged.
+        if cells and all(
+            cell.replace("-", "").replace(":", "") == ""
+            for cell in cells
+        ):
+            cleaned_lines.append(line)
+            continue
+
+        deduplicated: list[str] = []
+        previous_cell: str | None = None
+
+        for cell in cells:
+            if cell and cell == previous_cell:
+                deduplicated.append("")
+            else:
+                deduplicated.append(cell)
+
+            previous_cell = cell
+
+        cleaned_lines.append(
+            "| " + " | ".join(deduplicated) + " |"
+        )
+
+    return "\n".join(cleaned_lines)
+
 def parse_sections(markdown: str) -> list[dict]:
     """
     Splits a Markdown string into sections based on headings.
@@ -207,6 +257,9 @@ def chunk_document(markdown: str, source_file: str) -> list[Chunk]:
         title   = section["title"]
         content = section["content"]
 
+        if has_table(content):
+            content = deduplicate_table_cells(content)
+
         # Update heading context
         if level == 1:
             current_h1 = title
@@ -234,9 +287,8 @@ def chunk_document(markdown: str, source_file: str) -> list[Chunk]:
         token_count    = estimate_tokens(content)
         section_has_tbl = has_table(content)
 
-        if token_count <= MAX_TOKENS or section_has_tbl:
+        if token_count <= MAX_TOKENS:
             # Single chunk — no split needed
-            # (tables kept whole even if oversized)
             chunk_id = make_chunk_id(source_file, title, 1)
             chunks.append(Chunk(
                 chunk_id             = chunk_id,
@@ -280,7 +332,10 @@ def chunk_document(markdown: str, source_file: str) -> list[Chunk]:
                     content              = part_content,
                     token_count          = estimate_tokens(part_content),
                     has_table            = has_table(part_content),
-                    oversized_by_table   = False,
+                    oversized_by_table=(
+                        has_table(part_content)
+                        and estimate_tokens(part_content) > MAX_TOKENS
+                    ),
                 ))
 
     # Wire prev/next navigation links

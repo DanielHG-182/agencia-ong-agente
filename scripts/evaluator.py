@@ -30,6 +30,9 @@ from datasets import Dataset
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from ragas.run_config import RunConfig
 
+from scripts.config import settings
+from scripts.chunker import MAX_TOKENS, OVERLAP_TOKENS
+
 from ragas import evaluate
 from ragas.metrics import (
     faithfulness,
@@ -50,12 +53,13 @@ load_dotenv()
 # ─────────────────────────────────────────────────────────
 
 SYSTEM_CONFIG = {
-    "chunk_size": 500,
-    "chunk_overlap": 50,
-    "top_k": 4,
-    "embedding_model": "text-embedding-3-small",
+    "chunk_max_tokens": MAX_TOKENS,
+    "chunk_overlap_tokens": OVERLAP_TOKENS,
+    "top_k": settings.retriever_top_k,
+    "embedding_model": settings.embedding_model,
+    "generation_llm_model": settings.llm_model,
     "judge_llm_model": "gpt-4o-mini",
-    "retriever_version": "v1.2.0_chromadb",
+    "chroma_collection_name": settings.chroma_collection_name,
     "pipeline_version": "rag_eval_v1.0.0",
 }
 
@@ -106,6 +110,69 @@ def ensure_string_contexts(chunks) -> list[str]:
             sanitized.append(text)
     return sanitized
 
+def calculate_retrieval_ground_truth_metrics(
+    item: dict,
+    retrieved_chunks: list[dict],
+) -> dict:
+    """
+    Compare retrieved chunk IDs against the expected source chunk IDs
+    stored in the evaluation dataset.
+    """
+
+    if item["answerable"] is not True:
+        return {
+            "expected_chunks_count": 0,
+            "expected_chunks_retrieved": 0,
+            "retrieval_hit_at_1": None,
+            "retrieval_hit_at_3": None,
+            "expected_chunk_recall": None,
+        }
+
+    expected_ids: list[str] = []
+
+    if item.get("source_chunk_id"):
+        expected_ids = [item["source_chunk_id"]]
+
+    elif item.get("source_chunk_ids"):
+        expected_ids = list(item["source_chunk_ids"])
+
+    if not expected_ids:
+        return {
+            "expected_chunks_count": 0,
+            "expected_chunks_retrieved": 0,
+            "retrieval_hit_at_1": None,
+            "retrieval_hit_at_3": None,
+            "expected_chunk_recall": None,
+        }
+
+    retrieved_ids = [
+        chunk["chunk_id"]
+        for chunk in retrieved_chunks
+    ]
+
+    expected_set = set(expected_ids)
+    retrieved_set = set(retrieved_ids)
+
+    hits = expected_set.intersection(retrieved_set)
+
+    return {
+        "expected_chunks_count": len(expected_ids),
+        "expected_chunks_retrieved": len(hits),
+        "retrieval_hit_at_1": int(
+            bool(retrieved_ids)
+            and retrieved_ids[0] in expected_set
+        ),
+        "retrieval_hit_at_3": int(
+            any(
+                chunk_id in expected_set
+                for chunk_id in retrieved_ids[:3]
+            )
+        ),
+        "expected_chunk_recall": round(
+            len(hits) / len(expected_ids),
+            4,
+        ),
+    }
 
 # ─────────────────────────────────────────────────────────
 # DATASET LOADER
@@ -135,8 +202,9 @@ def load_golden_dataset(json_path: Path) -> list[dict]:
            ]
        }
 
-    Required fields per item: eval_id, category, question, ground_truth.
-    Optional fields (preserved in telemetry): source, chunk_index.
+    Required fields per item: eval_id, category, answerable, question, ground_truth.
+    Optional fields preserved in telemetry:
+    source, source_chunk_id, source_chunk_ids,source_section, source_sections.
     """
     if not json_path.exists():
         print(f"[ERROR] Golden dataset not found: {json_path}")
@@ -163,7 +231,13 @@ def load_golden_dataset(json_path: Path) -> list[dict]:
         sys.exit(1)
 
     # Validate required fields
-    required = {"eval_id", "category", "question", "ground_truth"}
+    required = {
+        "eval_id",
+        "category",
+        "answerable",
+        "question",
+        "ground_truth",
+    }
     invalid = []
     for i, item in enumerate(items):
         missing = required - item.keys()
@@ -189,6 +263,7 @@ def run_monitored_pipeline(
     Runs the real RAG pipeline (retrieve → generate_draft) for a single
     question and captures timing + error telemetry.
     """
+    
     run_log = {
         "status": "success",
         "error_message": None,
@@ -197,6 +272,7 @@ def run_monitored_pipeline(
         "generation_time_sec": 0.0,
         "total_pipeline_time_sec": 0.0,
         "contexts": [],
+        "retrieved_chunks": [],
         "answer": "",
     }
 
@@ -206,7 +282,24 @@ def run_monitored_pipeline(
     try:
         start = time.time()
         raw_chunks = retrieve(query=question, chroma_dir=chroma_dir)
+
         run_log["contexts"] = ensure_string_contexts(raw_chunks)
+
+        run_log["retrieved_chunks"] = [
+            {
+                "chunk_id": chunk.chunk_id,
+                "source_file": chunk.source_file,
+                "section_title": chunk.section_title,
+                "section_level": chunk.section_level,
+                "parent_section": chunk.parent_section,
+                "is_continuation": chunk.is_continuation,
+                "has_table": chunk.has_table,
+                "relevance_score": chunk.relevance_score,
+                "content": chunk.content,
+            }
+            for chunk in raw_chunks
+        ]
+
         run_log["retrieval_time_sec"] = round(time.time() - start, 3)
 
     except Exception as e:
@@ -225,6 +318,7 @@ def run_monitored_pipeline(
             chroma_dir=chroma_dir,
             retrieval_query=question,
             mode="evaluation",
+            retrieved_chunks=raw_chunks,
         )
 
         # generate_draft returns a DraftResult; extract text content
@@ -326,15 +420,26 @@ def main(project_name: str | None = None):
             directives_path=directives_path,
         )
 
+        retrieval_gt_metrics = calculate_retrieval_ground_truth_metrics(
+            item,
+            run_result["retrieved_chunks"],
+        )
+
         # Build telemetry record — include optional fields if present
         telemetry_record: dict = {
             "eval_id":                  item["eval_id"],
             "category":                 item["category"],
+            "answerable":               item["answerable"],
             "question":                 item["question"],
             "ground_truth":             item["ground_truth"],
-            # Optional fields from the synthetic dataset
+
+            # Optional fields from the evaluation dataset
             "source":                   item.get("source", ""),
-            "chunk_index":              item.get("chunk_index", ""),
+            "source_chunk_id":          item.get("source_chunk_id", ""),
+            "source_chunk_ids":         item.get("source_chunk_ids", []),
+            "source_section":           item.get("source_section", ""),
+            "source_sections":          item.get("source_sections", []),
+
             # Pipeline results
             "status":                   run_result["status"],
             "failed_stage":             run_result["failed_stage"],
@@ -343,20 +448,34 @@ def main(project_name: str | None = None):
             "generation_time_sec":      run_result["generation_time_sec"],
             "total_pipeline_time_sec":  run_result["total_pipeline_time_sec"],
             "chunks_count":             len(run_result["contexts"]),
+
+            # Deterministic retrieval evaluation
+            **retrieval_gt_metrics,
+
             "evaluation_timestamp":     now_utc(),
+
             **SYSTEM_CONFIG,
         }
+        
         telemetry_records.append(telemetry_record)
         audit_records.append({
             **telemetry_record,
-            "answer":             run_result["answer"],
+            "answer": run_result["answer"],
             "retrieved_contexts": run_result["contexts"],
+            "retrieved_chunks": run_result["retrieved_chunks"],
         })
 
         if run_result["status"] != "success":
             print(
                 f"  -> [Skipped RAGAS] "
                 f"Failed at stage: {run_result['failed_stage']}"
+            )
+            continue
+
+        if item["answerable"] is not True:
+            print(
+                "  -> [Skipped RAGAS] "
+                "Unanswerable case; preserved for manual abstention analysis."
             )
             continue
 

@@ -1,4 +1,5 @@
 import pytest
+from textwrap import dedent
 
 import scripts.chunker as chunker
 
@@ -114,50 +115,66 @@ def test_split_by_paragraphs_adds_overlap(monkeypatch):
     assert parts[0] == "one two\n\nthree four"
     assert parts[1] == "three four\n\nfive six"
 
-
 def test_chunk_document_splits_oversized_section(monkeypatch):
     monkeypatch.setattr(chunker, "MAX_TOKENS", 5)
     monkeypatch.setattr(chunker, "OVERLAP_TOKENS", 0)
-    monkeypatch.setattr(chunker, "estimate_tokens", lambda text: len(text.split()))
+    monkeypatch.setattr(
+        chunker,
+        "estimate_tokens",
+        lambda text: len(text.split()),
+    )
 
-    markdown = """
-## Objectives
+    markdown = dedent(
+        """
+        ## Objectives
 
-one two three four
+        one two three four
 
-five six seven eight
+        five six seven eight
 
-nine ten eleven twelve
-"""
+        nine ten eleven twelve
+        """
+    ).strip()
 
-    chunks = chunker.chunk_document(markdown, "proposal.md")
+    chunks = chunker.chunk_document(
+        markdown,
+        "proposal.md",
+    )
 
     assert len(chunks) == 3
-
     assert [chunk.part for chunk in chunks] == [1, 2, 3]
     assert all(chunk.total_parts == 3 for chunk in chunks)
-
     assert chunks[0].is_continuation is False
     assert chunks[1].is_continuation is True
     assert chunks[2].is_continuation is True
-
     assert all(chunk.parent_id is not None for chunk in chunks)
     assert len({chunk.parent_id for chunk in chunks}) == 1
 
 
-def test_table_is_kept_in_single_chunk_even_when_oversized(monkeypatch):
+def test_table_is_kept_in_single_chunk_even_when_oversized(
+    monkeypatch,
+):
     monkeypatch.setattr(chunker, "MAX_TOKENS", 5)
-    monkeypatch.setattr(chunker, "estimate_tokens", lambda text: len(text.split()))
+    monkeypatch.setattr(
+        chunker,
+        "estimate_tokens",
+        lambda text: len(text.split()),
+    )
 
-    markdown = """
-## Budget
+    markdown = dedent(
+        """
+        ## Budget
 
-<!-- TABLE:
-one two three four five six seven eight nine ten
-END TABLE -->
-"""
+        <!-- TABLE:
+        one two three four five six seven eight nine ten
+        END TABLE -->
+        """
+    ).strip()
 
-    chunks = chunker.chunk_document(markdown, "proposal.md")
+    chunks = chunker.chunk_document(
+        markdown,
+        "proposal.md",
+    )
 
     assert len(chunks) == 1
 
@@ -171,19 +188,28 @@ END TABLE -->
 def test_chunk_navigation_links_are_wired(monkeypatch):
     monkeypatch.setattr(chunker, "MAX_TOKENS", 5)
     monkeypatch.setattr(chunker, "OVERLAP_TOKENS", 0)
-    monkeypatch.setattr(chunker, "estimate_tokens", lambda text: len(text.split()))
+    monkeypatch.setattr(
+        chunker,
+        "estimate_tokens",
+        lambda text: len(text.split()),
+    )
 
-    markdown = """
-## Objectives
+    markdown = dedent(
+        """
+        ## Objectives
 
-one two three four
+        one two three four
 
-five six seven eight
+        five six seven eight
 
-nine ten eleven twelve
-"""
+        nine ten eleven twelve
+        """
+    ).strip()
 
-    chunks = chunker.chunk_document(markdown, "proposal.md")
+    chunks = chunker.chunk_document(
+        markdown,
+        "proposal.md",
+    )
 
     assert chunks[0].prev_chunk_id is None
     assert chunks[0].next_chunk_id == chunks[1].chunk_id
@@ -193,3 +219,60 @@ nine ten eleven twelve
 
     assert chunks[2].prev_chunk_id == chunks[1].chunk_id
     assert chunks[2].next_chunk_id is None
+
+
+def test_deduplicate_table_cells_preserves_columns_and_removes_duplicates():
+    text = dedent(
+        """
+        | Name | Name | Name | Value |
+        | --- | --- | --- | --- |
+        | WP5 | WP5 | WP5 | Impact |
+        """
+    ).strip()
+
+    result = chunker.deduplicate_table_cells(text)
+
+    lines = result.splitlines()
+
+    assert lines[0] == "| Name |  |  | Value |"
+    assert lines[1] == "| --- | --- | --- | --- |"
+    assert lines[2] == "| WP5 |  |  | Impact |"
+
+def test_large_duplicated_table_is_deduplicated_before_chunking(monkeypatch):
+    monkeypatch.setattr(chunker, "MAX_TOKENS", 20)
+    monkeypatch.setattr(chunker, "OVERLAP_TOKENS", 0)
+    monkeypatch.setattr(
+        chunker,
+        "estimate_tokens",
+        lambda text: len(text.split()),
+    )
+
+    markdown = dedent(
+        """
+        ## Work Package 5
+
+        | Method | Method | Method | Description |
+        | --- | --- | --- | --- |
+        | Theory of Change | Theory of Change | Theory of Change | qualitative analysis |
+        | SROI | SROI | SROI | quantitative analysis |
+        """
+    ).strip()
+
+    chunks = chunker.chunk_document(
+        markdown,
+        "proposal.md",
+    )
+
+    assert chunks
+    assert all(
+        chunk.oversized_by_table is False
+        for chunk in chunks
+    )
+
+    combined_content = "\n".join(
+        chunk.content
+        for chunk in chunks
+    )
+
+    assert "Theory of Change" in combined_content
+    assert "SROI" in combined_content
