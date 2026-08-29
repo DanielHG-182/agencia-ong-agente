@@ -151,6 +151,22 @@ def clean_markdown(text: str) -> str:
     text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
     return text.strip()
 
+def strip_redundant_section_heading(content: str, section_name: str) -> str:
+    """
+    Removes a leading Markdown heading when it repeats the section name.
+    """
+    lines = content.lstrip().splitlines()
+
+    if not lines:
+        return content
+
+    first_line = clean_markdown(lines[0]).strip()
+    normalized_name = clean_markdown(section_name).strip()
+
+    if first_line.casefold() == normalized_name.casefold():
+        return "\n".join(lines[1:]).lstrip()
+
+    return content
 
 def insert_markdown_table(doc: Document, markdown_table: str):
     """Converts a Markdown table into a Word table."""
@@ -196,8 +212,13 @@ def insert_section(doc: Document, section: Section):
     """
     doc.add_heading(section.name, level=section.level)
 
+    content = strip_redundant_section_heading(
+        section.content,
+        section.name,
+    )
+
     paragraphs = [
-        p.strip() for p in section.content.split("\n\n")
+        p.strip() for p in content.split("\n\n")
         if p.strip()
     ]
 

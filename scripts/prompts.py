@@ -103,7 +103,13 @@ def build_user_prompt(
     blocks.append(
         "## TASK\n"
         f"Write the following section: **{section_name}**\n\n"
-        f"{user_instruction}"
+        f"{user_instruction}\n\n"
+        "Draft only the content of the requested section.\n"
+        "Do not repeat the section title or number as a heading in the response.\n"
+        "Do not draft or reproduce child subsections unless the section-specific "
+        "directives explicitly require their full content. "
+        "If the section is only an introduction or framing section, keep it to "
+        "introductory content and leave its subsections to be generated separately."
     )
 
     return "\n\n---\n\n".join(blocks)
