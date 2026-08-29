@@ -1,7 +1,7 @@
 @echo off
-title ONG Document Assistant
+title RAG Proposal Assistant
 echo ================================================
-echo  ONG Document Assistant
+echo  RAG Proposal Assistant
 echo ================================================
 echo.
 

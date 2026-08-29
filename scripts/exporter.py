@@ -238,10 +238,11 @@ def insert_section(doc: Document, section: Section):
 # PUBLIC INTERFACE
 # ─────────────────────────────────────────────────────────
 
+
 def export_document(
     sections:      list[Section],
     project_name:  str,
-    output_dir:    Path | None = None,
+    output_dir:    Path,
     template_path: Path | None = None,
 ) -> Path:
     """
@@ -256,11 +257,7 @@ def export_document(
     Returns:
         Path to the generated .docx file
     """
-    # Resolve output_dir — parameter takes priority over env var
-    resolved_output = output_dir or Path(
-        os.getenv("OUTPUT_DIR", "output")
-    )
-    resolved_output.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Open template or create from scratch
     if template_path and template_path.exists():
@@ -282,7 +279,7 @@ def export_document(
     # Save
     timestamp   = datetime.now().strftime("%Y%m%d_%H%M")
     safe_name   = project_name.replace(" ", "_").lower()
-    output_path = resolved_output / f"{safe_name}_{timestamp}.docx"
+    output_path = output_dir / f"{safe_name}_{timestamp}.docx"
 
     doc.save(output_path)
     logger.info(f"Document saved: {output_path.resolve()}")

@@ -1,6 +1,6 @@
 ﻿"""
 main.py
-Entry point for the ONG document assistant pipeline.
+Entry point for the RAG Proposal Assistant pipeline.
 
 Usage:
     python main.py --stage conversion
