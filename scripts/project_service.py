@@ -7,6 +7,7 @@ independent from the Streamlit interface.
 
 import json
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -142,3 +143,22 @@ def get_project_summary(project_name: str) -> dict[str, Any]:
         "approved": approved,
         "last_modified": progress.get("last_modified") or "Not started",
     }
+
+def delete_project(project_name: str) -> None:
+    """
+    Permanently deletes a project directory and all of its contents.
+    """
+    paths = get_project_paths(project_name)
+    project_path = paths["base"]
+
+    if not project_path.exists():
+        raise ProjectError(
+            f"Project '{project_name}' does not exist"
+        )
+
+    try:
+        shutil.rmtree(project_path)
+    except OSError as exc:
+        raise ProjectError(
+            f"Could not delete project '{project_name}'"
+        ) from exc    

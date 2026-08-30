@@ -11,15 +11,16 @@ Usage:
 import argparse
 import json
 import logging
-import os
 import re
 import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
+
 from openai import OpenAI
 
 from scripts.chunker import Chunk, chunk_file
+from scripts.clients import create_openai_client
 
 load_dotenv()
 
@@ -443,7 +444,7 @@ def main():
     # Resolve project paths from the actual CLI project name
     paths = get_project_paths(args.project)
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = create_openai_client()
 
     # ── Load real RAG chunks ──
     try:

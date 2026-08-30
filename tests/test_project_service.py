@@ -216,3 +216,33 @@ def test_get_project_summary_counts_approved_sections(
         "approved": 2,
         "last_modified": "2026-08-25T12:00:00",
     }
+
+def test_delete_project_removes_project_directory(tmp_path, monkeypatch):
+    project_dir = tmp_path / "demo_project"
+    project_dir.mkdir()
+    (project_dir / "test.txt").write_text("data", encoding="utf-8")
+
+    monkeypatch.setattr(
+        project_service,
+        "get_project_paths",
+        lambda _: {"base": project_dir},
+    )
+
+    project_service.delete_project("demo_project")
+
+    assert not project_dir.exists()
+
+def test_delete_project_raises_when_project_does_not_exist(
+    tmp_path,
+    monkeypatch,
+):
+    project_dir = tmp_path / "missing_project"
+
+    monkeypatch.setattr(
+        project_service,
+        "get_project_paths",
+        lambda _: {"base": project_dir},
+    )
+
+    with pytest.raises(project_service.ProjectError):
+        project_service.delete_project("missing_project")

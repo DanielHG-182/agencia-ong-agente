@@ -10,6 +10,7 @@ from scripts.project_service import (
     ProjectError,
     ProjectProgressError,
     create_project,
+    delete_project,
     get_project_summary,
     load_project_progress,
     slugify_project_name,
@@ -198,10 +199,8 @@ def confirm_delete_dialog(project_name: str, navigate_to):
 
     with col1:
         if st.button("Yes, delete", use_container_width=True, type="primary"):
-            import shutil
-            paths = get_project_paths(project_name)
             try:
-                shutil.rmtree(paths["base"])
+                delete_project(project_name)
                 st.success(f"Project '{project_name}' deleted.")
 
                 # Clear session if deleted project was active
@@ -211,8 +210,8 @@ def confirm_delete_dialog(project_name: str, navigate_to):
                     st.session_state.sections       = []
 
                 st.rerun()
-            except Exception as e:
-                st.error(f"Error deleting project: {e}")
+            except ProjectError as exc:
+                st.error(str(exc))
 
     with col2:
         if st.button("Cancel", use_container_width=True):
