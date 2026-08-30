@@ -198,8 +198,6 @@ Example:
 python main.py --stage indexing --project demo_project
 ```
 
-The `conversion` and `chunking` stages currently use the global paths configured through `RAW_DOCS_DIR`, `PROCESSED_DOCS_DIR`, and `CHUNKS_DIR`. The remaining project-specific stages use the folder provided through `--project`.
-
 ## Repository Structure
 
 ```text
@@ -213,6 +211,7 @@ The `conversion` and `chunking` stages currently use the global paths configured
 |-- projects/
 |   `-- demo_project/
 |       |-- config/
+|       |   |-- directives.md
 |       |   `-- index.json
 |       |-- data/
 |       |   |-- raw/
@@ -221,7 +220,6 @@ The `conversion` and `chunking` stages currently use the global paths configured
 |       |   `-- evaluation/
 |       |-- vector_db/
 |       |-- output/
-|       |-- directives.md
 |       `-- progress.json
 |
 |-- scripts/

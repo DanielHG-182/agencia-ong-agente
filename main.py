@@ -3,7 +3,7 @@ main.py
 Entry point for the RAG Proposal Assistant pipeline.
 
 Usage:
-    python main.py --stage conversion
+    python main.py --stage conversion --project demo_project
 """
 
 import logging
