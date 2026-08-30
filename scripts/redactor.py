@@ -43,6 +43,7 @@ class DraftResult:
     prompt_tokens:  int
     output_tokens:  int
     chunks_used:    int
+    retrieved_chunks: list[RetrievedChunk]
 
 # Best Practice: Define a robust, enterprise-grade retry policy
 # This catches 429 (RateLimitError) and generic server errors, applying 
@@ -212,4 +213,6 @@ def generate_draft(
         prompt_tokens=usage.prompt_tokens,
         output_tokens=usage.completion_tokens,
         chunks_used=len(chunks),
+        retrieved_chunks=chunks,
     )
+    

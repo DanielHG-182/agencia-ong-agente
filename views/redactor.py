@@ -66,6 +66,7 @@ def unsaved_changes_dialog(destination: str, navigate_to):
         if st.button("🗑 Discard", use_container_width=True):
             st.session_state.unsaved_changes = False
             st.session_state.current_draft   = None
+            st.session_state.current_retrieved_chunks = []
             navigate_to(destination)
 
     with col3:
@@ -90,6 +91,7 @@ def navigate_section(direction: int, navigate_to):
     if 0 <= new_index < len(sections):
         st.session_state.active_section  = new_index
         st.session_state.current_draft   = sections[new_index].get("content") or None
+        st.session_state.current_retrieved_chunks = []
         st.session_state.unsaved_changes = False
         st.rerun()
 
@@ -209,6 +211,7 @@ def render(navigate_to):
                         chroma_dir        = str(paths["vector_db"]), # ← from session
                     )
                     st.session_state.current_draft   = result.content
+                    st.session_state.current_retrieved_chunks = result.retrieved_chunks
                     st.session_state.unsaved_changes = True
                     st.caption(
                         f"Tokens — in: {result.prompt_tokens} "
@@ -220,24 +223,26 @@ def render(navigate_to):
 
         st.divider()
 
-        # Show chunks — configurable from sidebar
+        # Show the exact chunks used to generate the current draft
         if st.session_state.show_chunks:
-            st.markdown("**Retrieved chunks**")
-            from scripts.retriever import retrieve
-            if instruction.strip():
-                try:
-                    chunks = retrieve(
-                        query      = instruction,
-                        chroma_dir = str(paths["vector_db"]),  # ← from session
-                    )
-                    for chunk in chunks:
-                        with st.expander(
-                            f"[{chunk.relevance_score:.2f}] "
-                            f"{chunk.source_file} — {chunk.section_title}"
-                        ):
-                            st.markdown(chunk.content)
-                except Exception as e:
-                    st.warning(f"Could not retrieve chunks: {e}")
+            st.markdown("**Retrieved context used for this draft**")
+
+            chunks = st.session_state.get(
+                "current_retrieved_chunks",
+                [],
+            )
+
+            if chunks:
+                for chunk in chunks:
+                    with st.expander(
+                        f"[{chunk.relevance_score:.2f}] "
+                        f"{chunk.source_file} — {chunk.section_title}"
+                    ):
+                        st.markdown(chunk.content)
+            else:
+                st.caption(
+                    "No retrieved context available for the current draft."
+                )
 
     with col_draft:
         st.markdown("**Draft**")
@@ -303,6 +308,7 @@ def render(navigate_to):
                             chroma_dir        = str(paths["vector_db"]), # ← from session
                         )
                         st.session_state.current_draft   = result.content
+                        st.session_state.current_retrieved_chunks = result.retrieved_chunks
                         st.session_state.unsaved_changes = True
                         st.rerun()
                     except Exception as e:

@@ -55,7 +55,7 @@ def load_index_from_file() -> list[dict] | None:
     try:
         data = json.loads(index_path.read_text(encoding="utf-8"))
         return data if isinstance(data, list) else None
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return None
 
 
@@ -185,6 +185,7 @@ def render_section_row(section: dict, index: int, navigate_to):
                 ):
                     st.session_state.active_section = index
                     st.session_state.current_draft  = section.get("content") or None
+                    st.session_state.current_retrieved_chunks = []
                     navigate_to("redactor")
 
             with btn2:
@@ -334,6 +335,7 @@ def render(navigate_to):
         ):
             st.session_state.active_section = next_pending
             st.session_state.current_draft  = None
+            st.session_state.current_retrieved_chunks = []
             navigate_to("redactor")
     else:
         st.success("All sections approved! Ready to export.", icon="🎉")
