@@ -1,8 +1,35 @@
 # RAG Proposal Assistant
 
-RAG Proposal Assistant is a document intelligence application designed to support NGOs and proposal management professionals in drafting evidence-based funding proposals.
+[![CI](https://github.com/DanielHG-182/agencia-ong-agente/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielHG-182/agencia-ong-agente/actions/workflows/ci.yml)
 
-The application processes reference documents, converts them into structured content, creates retrievable chunks, stores embeddings in a vector database, retrieves relevant evidence, and uses a large language model to generate proposal sections grounded in the available sources.
+RAG Proposal Assistant is an end-to-end Retrieval-Augmented Generation system for evidence-grounded funding proposal drafting.
+
+It combines structure-aware document processing, semantic retrieval, project-specific writing directives, grounded generation, human review, and exact retrieval-context traceability in a multi-project workflow.
+
+**Evaluated performance:** Hit@3 **0.90** · Recall@3 **0.83** · Faithfulness **0.96** · Answer Relevancy **0.94**
+
+Built with Python, OpenAI, ChromaDB, RAGAS, Streamlit, pytest, and GitHub Actions.
+
+```mermaid
+flowchart LR
+    A[Source Documents<br/>PDF · DOCX · TXT] --> B[Document Processing]
+    B --> C[Structure-aware Chunking]
+    C --> D[OpenAI Embeddings]
+    D --> E[(ChromaDB)]
+
+    E --> F[Semantic Retrieval]
+    F --> G[Retrieved Evidence]
+
+    H[Project Directives] --> I[Grounded Generation]
+    G --> I
+
+    I --> J[Human Review]
+    J --> K[Approved Sections]
+    K --> L[DOCX Export]
+
+    F -.-> M[Retrieval Evaluation]
+    I -.-> N[RAGAS Evaluation]
+```
 
 ## Why This Project?
 
@@ -19,6 +46,12 @@ This project explores how Retrieval-Augmented Generation (RAG) can help proposal
 * export final proposals to Microsoft Word;
 * evaluate both retrieval and generation quality.
 
+## Application Workflow
+
+![RAG Proposal Assistant drafting workflow](docs/images/drafting-workflow.png)
+
+The drafting interface combines project-specific instructions, grounded generation, human review, regeneration, and section-level export in a single workflow.
+
 ## Current Status
 
 The core application is implemented and functional end to end, including document ingestion, chunking, indexing, retrieval, grounded drafting, human review, evaluation, and Microsoft Word export.
@@ -34,42 +67,9 @@ The repository includes:
 * a local Streamlit interface;
 * CLI pipeline stages for processing, indexing, testing, and evaluation.
 
-The project is currently in its final portfolio-hardening phase, focused on technical cleanup, reproducibility, documentation, and presentation.
-
 ## How It Works
 
 RAG Proposal Assistant implements an end-to-end Retrieval-Augmented Generation pipeline.
-
-```text
-Source documents
-      |
-      v
-Document conversion
-      |
-      v
-Structure-aware hierarchical chunking
-      |
-      v
-OpenAI embeddings
-      |
-      v
-ChromaDB vector index
-      |
-      v
-Semantic retrieval
-      |
-      v
-Project context and writing directives
-      |
-      v
-Grounded section generation
-      |
-      v
-Human review and approval
-      |
-      v
-Microsoft Word export
-```
 
 ### Pipeline Stages
 
