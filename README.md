@@ -1,6 +1,6 @@
 # RAG Proposal Assistant
 
-[![CI](https://github.com/DanielHG-182/agencia-ong-agente/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielHG-182/agencia-ong-agente/actions/workflows/ci.yml)
+[![CI](https://github.com/DanielHG-182/rag-proposal-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielHG-182/rag-proposal-assistant/actions/workflows/ci.yml)
 
 RAG Proposal Assistant is an end-to-end Retrieval-Augmented Generation system for evidence-grounded funding proposal drafting.
 
@@ -131,8 +131,8 @@ The Streamlit interface provides a visual workflow for managing projects, review
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/DanielHG-182/agencia-ong-agente.git
-cd agencia-ong-agente
+git clone https://github.com/DanielHG-182/rag-proposal-assistant.git
+cd rag-proposal-assistant
 ```
 
 ### 2. Create a virtual environment
